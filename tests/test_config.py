@@ -75,7 +75,7 @@ def test_config_build_detector():
         # 'guided_anchoring/ga_rpn_x101_32x4d_fpn_1x.py',
         # 'guided_anchoring/ga_retinanet_r50_caffe_fpn_1x.py',
         # 'guided_anchoring/ga_fast_r50_caffe_fpn_1x.py',
-        # 'guided_anchoring/ga_retinanet_x101_32x4d_fpn_1x.py',
+        # 'guided_anchoring/ga_dml_retinanet_x101_32x4d_fpn_1x.py',
         # 'guided_anchoring/ga_rpn_r101_caffe_rpn_1x.py',
         # 'guided_anchoring/ga_faster_r50_caffe_fpn_1x.py',
         'guided_anchoring/ga_rpn_r50_caffe_fpn_1x.py',

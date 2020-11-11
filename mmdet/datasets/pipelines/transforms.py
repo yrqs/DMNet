@@ -372,7 +372,9 @@ class RandomCrop(object):
     def __init__(self, crop_size):
         self.crop_size = crop_size
 
+        # self.sample_options = (0.1, 0.3, 0.7, 0.9, 1)
     def __call__(self, results):
+        # self.crop_size = ()
         img = results['img']
         margin_h = max(img.shape[0] - self.crop_size[0], 0)
         margin_w = max(img.shape[1] - self.crop_size[1], 0)

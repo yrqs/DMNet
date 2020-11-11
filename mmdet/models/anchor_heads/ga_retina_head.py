@@ -21,6 +21,7 @@ class GARetinaHead(GuidedAnchorHead):
         self.stacked_convs = stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        # print('conv_cfg: ', conv_cfg)
         super(GARetinaHead, self).__init__(num_classes, in_channels, **kwargs)
 
     def _init_layers(self):
@@ -98,10 +99,13 @@ class GARetinaHead(GuidedAnchorHead):
         cls_feat = self.feature_adaption_cls(cls_feat, shape_pred)
         reg_feat = self.feature_adaption_reg(reg_feat, shape_pred)
 
+        # print('cls_feat.size: ', cls_feat.size())
+        # print('cls_feat.type: ', type(cls_feat))
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
         else:
             mask = None
         cls_score = self.retina_cls(cls_feat, mask)
         bbox_pred = self.retina_reg(reg_feat, mask)
+
         return cls_score, bbox_pred, shape_pred, loc_pred

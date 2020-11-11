@@ -55,6 +55,85 @@ class FeatureAdaption(nn.Module):
         x = self.relu(self.conv_adaption(x, offset))
         return x
 
+class FeatureAdaptionCls(nn.Module):
+    """Feature Adaption Module.
+
+    Feature Adaption Module is implemented based on DCN v1.
+    It uses anchor shape prediction rather than feature map to
+    predict offsets of deformable conv layer.
+
+    Args:
+        in_channels (int): Number of channels in the input feature map.
+        out_channels (int): Number of channels in the output feature map.
+        kernel_size (int): Deformable conv kernel size.
+        deformable_groups (int): Deformable conv group size.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size=3,
+                 deformable_groups=4):
+        super(FeatureAdaptionCls, self).__init__()
+        offset_channels = kernel_size * kernel_size * 2
+        self.conv_offset = nn.Conv2d(
+            2, deformable_groups * offset_channels, 1, bias=False)
+        self.conv_adaption = DeformConv(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=(kernel_size - 1) // 2,
+            deformable_groups=deformable_groups)
+        self.relu = nn.ReLU(inplace=True)
+
+    def init_weights(self):
+        normal_init(self.conv_offset, std=0.1)
+        normal_init(self.conv_adaption, std=0.01)
+
+    def forward(self, x, shape):
+        offset = self.conv_offset(shape)
+        x = self.relu(self.conv_adaption(x, offset))
+        return x
+
+class FeatureAdaption1(nn.Module):
+    """Feature Adaption Module.
+
+    Feature Adaption Module is implemented based on DCN v1.
+    It uses anchor shape prediction rather than feature map to
+    predict offsets of deformable conv layer.
+
+    Args:
+        in_channels (int): Number of channels in the input feature map.
+        out_channels (int): Number of channels in the output feature map.
+        kernel_size (int): Deformable conv kernel size.
+        deformable_groups (int): Deformable conv group size.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size=3,
+                 deformable_groups=4):
+        super(FeatureAdaption1, self).__init__()
+        offset_channels = kernel_size * kernel_size * 2
+        self.conv_offset = nn.Conv2d(
+            2, deformable_groups * offset_channels, 1, bias=False)
+        self.conv_adaption = DeformConv(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=(kernel_size - 1) // 2,
+            deformable_groups=deformable_groups)
+        self.relu = nn.ReLU(inplace=True)
+
+    def init_weights(self):
+        normal_init(self.conv_offset, std=0.1)
+        normal_init(self.conv_adaption, std=0.01)
+
+    def forward(self, x, shape):
+        offset = self.conv_offset(shape)
+        x = self.relu(self.conv_adaption(x, offset))
+        return x
 
 @HEADS.register_module
 class GuidedAnchorHead(AnchorHead):
@@ -152,6 +231,7 @@ class GuidedAnchorHead(AnchorHead):
         # one anchor per location
         self.num_anchors = 1
         self.use_sigmoid_cls = loss_cls.get('use_sigmoid', False)
+        # self.use_sigmoid_cls = True
         self.cls_focal_loss = loss_cls['type'] in ['FocalLoss']
         self.loc_focal_loss = loss_loc['type'] in ['FocalLoss']
         if self.use_sigmoid_cls:
@@ -482,7 +562,6 @@ class GuidedAnchorHead(AnchorHead):
             bbox_weights_list,
             num_total_samples=num_total_samples,
             cfg=cfg)
-
         # get anchor location loss
         losses_loc = []
         for i in range(len(loc_preds)):

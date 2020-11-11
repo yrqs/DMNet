@@ -354,7 +354,8 @@ def eval_map(det_results,
             recalls = recalls[0, :]
             precisions = precisions[0, :]
             num_gts = num_gts.item()
-        mode = 'area' if dataset != 'voc07' else '11points'
+        # mode = 'area' if dataset != 'voc07' else '11points'
+        mode = 'area' if 'voc07' not in dataset else '11points'
         ap = average_precision(recalls, precisions, mode)
         eval_results.append({
             'num_gts': num_gts,

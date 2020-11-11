@@ -12,9 +12,9 @@ from .registry import DATASETS
 class XMLDataset(CustomDataset):
 
     def __init__(self, min_size=None, **kwargs):
-        super(XMLDataset, self).__init__(**kwargs)
         self.cat2label = {cat: i + 1 for i, cat in enumerate(self.CLASSES)}
         self.min_size = min_size
+        super(XMLDataset, self).__init__(**kwargs)
 
     def load_annotations(self, ann_file):
         img_infos = []
@@ -44,6 +44,8 @@ class XMLDataset(CustomDataset):
         labels_ignore = []
         for obj in root.findall('object'):
             name = obj.find('name').text
+            if name not in self.CLASSES:
+                continue
             label = self.cat2label[name]
             difficult = int(obj.find('difficult').text)
             bnd_box = obj.find('bndbox')

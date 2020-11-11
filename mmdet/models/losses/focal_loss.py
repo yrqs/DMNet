@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -41,6 +42,32 @@ def sigmoid_focal_loss(pred,
     loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
     return loss
 
+def no_sigmoid_focal_loss(pred,
+                       target,
+                       weight=None,
+                       gamma=2.0,
+                       alpha=0.25,
+                       reduction='mean',
+                       avg_factor=None):
+    # self.alpha = self.alpha.to(preds.device)
+    alpha_ = torch.zeros(pred.size(-1)).cuda()
+    alpha_[0] += alpha
+    alpha_[1:] += (1 - alpha)
+    alpha_ = alpha_.to(pred.device)
+    preds_softmax = F.softmax(pred, dim=1)
+    # preds_softmax = pred
+    preds_logsoft = torch.log(preds_softmax)
+    preds_softmax = preds_softmax.gather(1, target.view(-1, 1))  # 这部分实现nll_loss ( crossempty = log_softmax + nll )
+    preds_logsoft = preds_logsoft.gather(1, target.view(-1, 1))
+    alpha_ = alpha_.gather(0, target.view(-1))
+    loss = -torch.mul(torch.pow((1 - preds_softmax), gamma), preds_logsoft)  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
+    loss = torch.mul(alpha_, loss.t())
+    # print('before: ', loss)
+    if weight is not None:
+        weight = weight.view(-1, 1)
+    loss = weight_reduce_loss(loss, weight, reduction, None)
+    # print('after: ', loss)
+    return loss
 
 @LOSSES.register_module
 class FocalLoss(nn.Module):
@@ -52,7 +79,7 @@ class FocalLoss(nn.Module):
                  reduction='mean',
                  loss_weight=1.0):
         super(FocalLoss, self).__init__()
-        assert use_sigmoid is True, 'Only sigmoid focal loss supported now.'
+        # assert use_sigmoid is True, 'Only sigmoid focal loss supported now.'
         self.use_sigmoid = use_sigmoid
         self.gamma = gamma
         self.alpha = alpha
@@ -78,5 +105,13 @@ class FocalLoss(nn.Module):
                 reduction=reduction,
                 avg_factor=avg_factor)
         else:
-            raise NotImplementedError
+            # raise NotImplementedError
+            loss_cls = self.loss_weight * no_sigmoid_focal_loss(
+                pred,
+                target,
+                weight,
+                gamma=self.gamma,
+                alpha=self.alpha,
+                reduction=reduction,
+                avg_factor=avg_factor)
         return loss_cls

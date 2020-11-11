@@ -34,7 +34,6 @@ class SigmoidFocalLossFunction(Function):
 
 sigmoid_focal_loss = SigmoidFocalLossFunction.apply
 
-
 # TODO: remove this module
 class SigmoidFocalLoss(nn.Module):
 

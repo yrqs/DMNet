@@ -82,8 +82,10 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0))
 # dataset settings
-dataset_type = 'CocoDataset'
-data_root = 'data/coco/'
+# dataset_type = 'CocoDataset'
+# data_root = 'data/coco/'
+dataset_type = 'Underwater'
+data_root = 'data/underwater/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -112,26 +114,45 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    imgs_per_gpu=2,
+    imgs_per_gpu=1,
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        # ann_file=data_root + 'annotations/instances_train2017.json',
+        # img_prefix=data_root + 'train2017/',
+        ann_file=data_root + 'train/annotations/train.json',
+        img_prefix=data_root + 'train/image/',
         pipeline=train_pipeline),
-    val=dict(
-        type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
-        pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        # ann_file='data/train/annotations/testA.json',
+        # img_prefix=data_root + 'test-A-image/',
+        ann_file=data_root+'test18ori/annotations/test18ori.json',
+        img_prefix=data_root+'test18ori/image/',
+        # ann_file=data_root + 'annotations/instances_val2017.json',
+        # img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
+# data = dict(
+#     imgs_per_gpu=2,
+#     workers_per_gpu=2,
+#     train=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_train2017.json',
+#         img_prefix=data_root + 'train2017/',
+#         pipeline=train_pipeline),
+#     val=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_val2017.json',
+#         img_prefix=data_root + 'val2017/',
+#         pipeline=test_pipeline),
+#     test=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_val2017.json',
+#         img_prefix=data_root + 'val2017/',
+#         pipeline=test_pipeline))
 evaluation = dict(interval=1, metric='proposal_fast')
 # optimizer
-optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0025, momentum=0.9, weight_decay=0.0001)
 # runner configs
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(

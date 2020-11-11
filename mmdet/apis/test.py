@@ -20,7 +20,7 @@ def single_gpu_test(model, data_loader, show=False):
         results.append(result)
 
         if show:
-            model.module.show_result(data, result)
+            model.module.show_result(data, result, score_thr=0.3)
 
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):
@@ -55,7 +55,11 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
         prog_bar = mmcv.ProgressBar(len(dataset))
     for i, data in enumerate(data_loader):
         with torch.no_grad():
+            # test = model.backbone(**data)
+            # print(dir(model))
             result = model(return_loss=False, rescale=True, **data)
+            # print([r.shape for r in result])
+            # print(result)
         results.append(result)
 
         if rank == 0:

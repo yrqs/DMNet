@@ -1,6 +1,10 @@
 import mmcv
 
 
+def underwater_classes():
+    # return ['holothurian', 'echinus', 'scallop', 'starfish', 'waterweeds']
+    return ['holothurian', 'echinus', 'scallop', 'starfish']
+
 def wider_face_classes():
     return ['face']
 
@@ -11,7 +15,23 @@ def voc_classes():
         'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
         'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
     ]
+    # return [
+    #     'diningtable', 'dog', 'horse', 'motorbike', 'person',
+    #     'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
+    # ]
 
+def voc07novel1_classes():
+    return ['bird', 'bus', 'cow', 'motorbike', 'sofa']
+    # return ['aeroplane', 'motorbike', 'c1', 'boat', 'bottle', 'c2', 'bus',
+    #            'cat', 'chair', 'c3', 'diningtable', 'dog', 'horse',
+    #            'c4', 'bird', 'pottedplant', 'cow', 'c5', 'train',
+    #            'sofa']
+
+def voc07novel2_classes():
+    return ['aeroplane', 'bottle', 'cow', 'horse', 'sofa']
+
+def voc07novel3_classes():
+    return ['boat', 'cat', 'motorbike', 'sheep', 'sofa']
 
 def imagenet_det_classes():
     return [
@@ -80,7 +100,45 @@ def coco_classes():
         'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase',
         'scissors', 'teddy_bear', 'hair_drier', 'toothbrush'
     ]
+    # return [
+    #     'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+    #     'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
+    #     'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'
+    # ]
 
+
+def coco_40_classes():
+    return [
+        'truck', 'skateboard', 'banana', 'stop sign', 'parking meter',
+        'bench', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+        'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
+        'airplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+        'chair', 'cow', 'dining table', 'dog', 'horse', 'motorcycle', 'person',
+        'potted plant', 'sheep', 'couch', 'train', 'tv',
+    ]
+
+
+def coco_n20_classes():
+    return [
+        'airplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+        'chair', 'cow', 'dining table', 'dog', 'horse', 'motorcycle', 'person',
+        'potted plant', 'sheep', 'couch', 'train', 'tv',
+    ]
+def coco_n20_40_classes():
+    return [
+        'airplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+        'chair', 'cow', 'dining table', 'dog', 'horse', 'motorcycle', 'person',
+        'potted plant', 'sheep', 'couch', 'train', 'tv',
+        'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10',
+        'c11', 'c12', 'c13', 'c14', 'c15', 'c16', 'c17', 'c18', 'c19', 'c20'
+    ]
+
+def coco_b20_classes():
+    return [
+        'truck', 'skateboard', 'banana', 'stop sign', 'parking meter',
+        'bench', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+        'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
+    ]
 
 def cityscapes_classes():
     return [
@@ -91,11 +149,18 @@ def cityscapes_classes():
 
 dataset_aliases = {
     'voc': ['voc', 'pascal_voc', 'voc07', 'voc12'],
+    'voc07novel1': ['voc07novel1'],
+    'voc07novel2': ['voc07novel2'],
+    'voc07novel3': ['voc07novel3'],
     'imagenet_det': ['det', 'imagenet_det', 'ilsvrc_det'],
     'imagenet_vid': ['vid', 'imagenet_vid', 'ilsvrc_vid'],
     'coco': ['coco', 'mscoco', 'ms_coco'],
     'wider_face': ['WIDERFaceDataset', 'wider_face', 'WDIERFace'],
-    'cityscapes': ['cityscapes']
+    'cityscapes': ['cityscapes'],
+    'coco_40': ['coco_40'],
+    'coco_n20': ['coco_n20'],
+    'coco_n20_40': ['coco_n20_40'],
+    'coco_b20': ['coco_b20']
 }
 
 
