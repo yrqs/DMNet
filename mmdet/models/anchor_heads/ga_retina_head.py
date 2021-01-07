@@ -17,12 +17,19 @@ class GARetinaHead(GuidedAnchorHead):
                  stacked_convs=4,
                  conv_cfg=None,
                  norm_cfg=None,
+                 freeze=False,
                  **kwargs):
         self.stacked_convs = stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         # print('conv_cfg: ', conv_cfg)
         super(GARetinaHead, self).__init__(num_classes, in_channels, **kwargs)
+
+        if freeze:
+            for c in [self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape,
+                      self.feature_adaption_cls, self.feature_adaption_reg]:
+                for p in c.parameters():
+                    p.requires_grad = False
 
     def _init_layers(self):
         self.relu = nn.ReLU(inplace=True)
@@ -69,6 +76,7 @@ class GARetinaHead(GuidedAnchorHead):
             padding=1)
         self.retina_reg = MaskedConv2d(
             self.feat_channels, self.num_anchors * 4, 3, padding=1)
+
 
     def init_weights(self):
         for m in self.cls_convs:

@@ -11,36 +11,60 @@ from mmdet.core import eval_recalls
 from mmdet.utils import print_log
 from .custom import CustomDataset
 from .registry import DATASETS
+from terminaltables import AsciiTable
+import itertools
 
 
 @DATASETS.register_module
 class CocoDataset(CustomDataset):
 
-    # CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-    #            'train', 'truck', 'boat', 'traffic_light', 'fire_hydrant',
-    #            'stop_sign', 'parking_meter', 'bench', 'bird', 'cat', 'dog',
-    #            'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe',
-    #            'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-    #            'skis', 'snowboard', 'sports_ball', 'kite', 'baseball_bat',
-    #            'baseball_glove', 'skateboard', 'surfboard', 'tennis_racket',
-    #            'bottle', 'wine_glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
-    #            'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
-    #            'hot_dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-    #            'potted_plant', 'bed', 'dining_table', 'toilet', 'tv', 'laptop',
-    #            'mouse', 'remote', 'keyboard', 'cell_phone', 'microwave',
-    #            'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
-    #            'vase', 'scissors', 'teddy_bear', 'hair_drier', 'toothbrush')
-    CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
-               'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
-               'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
-               'tvmonitor')
+
+    CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+               'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
+               'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog',
+               'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe',
+               'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+               'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat',
+               'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+               'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+               'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
+               'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
+               'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+               'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
+               'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
+               'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush')
+
+    NOVEL_CLASSES = ('airplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+                     'chair', 'cow', 'dining table', 'dog', 'horse', 'motorcycle', 'person',
+                     'potted plant', 'sheep', 'couch', 'train', 'tv',)
+
+    BASE_CLASSES = ('truck', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter',
+                    'bench', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+                    'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+                    'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
+                    'tennis racket', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+                    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog',
+                    'pizza', 'donut', 'cake', 'bed', 'toilet', 'laptop', 'mouse', 'remote', 'keyboard',
+                    'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
+                    'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush')
+
+    def __init__(self, fixed_cls_idx=True, **kwargs):
+        self.fixed_cls_idx = fixed_cls_idx
+        super(CocoDataset, self).__init__(**kwargs)
+
     def load_annotations(self, ann_file):
         self.coco = COCO(ann_file)
         self.cat_ids = self.coco.getCatIds()
-        self.cat2label = {
-            cat_id: i + 1
-            for i, cat_id in enumerate(self.cat_ids)
-        }
+        if self.fixed_cls_idx:
+            self.cat2label = {
+                cat_id: self.CLASSES.index(self.coco.cats[cat_id]['name']) + 1
+                for i, cat_id in enumerate(self.cat_ids)
+            }
+        else:
+            self.cat2label = {
+                cat_id: i + 1
+                for i, cat_id in enumerate(self.cat_ids)
+            }
         self.img_ids = self.coco.getImgIds()
         img_infos = []
         for i in self.img_ids:
@@ -295,7 +319,7 @@ class CocoDataset(CustomDataset):
                  metric='bbox',
                  logger=None,
                  jsonfile_prefix=None,
-                 classwise=False,
+                 classwise=True,
                  proposal_nums=(100, 300, 1000),
                  iou_thrs=np.arange(0.5, 0.96, 0.05)):
         """Evaluation in COCO protocol.
@@ -360,6 +384,9 @@ class CocoDataset(CustomDataset):
 
             iou_type = 'bbox' if metric == 'proposal' else metric
             cocoEval = COCOeval(cocoGt, cocoDt, iou_type)
+            # print(cocoGt.getCatIds())
+            # print(cocoDt.getCatIds())
+
             cocoEval.params.imgIds = self.img_ids
             if metric == 'proposal':
                 cocoEval.params.useCats = 0
@@ -379,7 +406,89 @@ class CocoDataset(CustomDataset):
                 cocoEval.accumulate()
                 cocoEval.summarize()
                 if classwise:  # Compute per-category AP
-                    pass  # TODO
+                    precisions = cocoEval.eval['precision']
+                    recalls = cocoEval.eval['recall']
+                    # precision: (iou, recall, cls, area range, max dets)
+                    assert len(self.cat_ids) == precisions.shape[2]
+                    # precision: (iou, cls, area range, max dets)
+                    assert len(self.cat_ids) == recalls.shape[1]
+
+                    results_per_category = []
+                    novel_results_per_category = {
+                        'ap' : 0., 'ap_05' : 0., 'ap_075' : 0., 'ap_s' : 0., 'ap_m' : 0., 'ap_l' : 0.,
+                        'ar_1' : 0., 'ar_10' : 0., 'ar_100' : 0., 'ar_s' : 0., 'ar_m' : 0., 'ar_l' : 0.,
+                    }
+                    ap_base_category = []
+
+                    novel_idx = []
+                    for idx, catId in enumerate(self.cat_ids):
+                        nm = self.coco.loadCats(catId)[0]
+                        if nm['name'] in self.NOVEL_CLASSES:
+                            novel_idx.append(idx)
+                        else:
+                            novel_idx.append(idx)
+
+                    precision_novel = precisions[:, :, novel_idx, 0, -1]
+                    precision_05_novel = precisions[0, :, novel_idx, 0, -1]
+                    precision_075_novel = precisions[5, :, novel_idx, 0, -1]
+                    precision_s_novel = precisions[:, :, novel_idx, 1, -1]
+                    precision_m_novel = precisions[:, :, novel_idx, 2, -1]
+                    precision_l_novel = precisions[:, :, novel_idx, 3, -1]
+
+                    novel_results_per_category['ap'] = np.mean(precision_novel[precision_novel>-1])
+                    novel_results_per_category['ap_05'] = np.mean(precision_05_novel[precision_05_novel>-1])
+                    novel_results_per_category['ap_075'] = np.mean(precision_075_novel[precision_075_novel>-1])
+                    novel_results_per_category['ap_s'] = np.mean(precision_s_novel[precision_s_novel>-1])
+                    novel_results_per_category['ap_m'] = np.mean(precision_m_novel[precision_m_novel>-1])
+                    novel_results_per_category['ap_l'] = np.mean(precision_l_novel[precision_l_novel>-1])
+
+                    recall_1 = recalls[:, novel_idx, 0, 0]
+                    recall_10 = recalls[:, novel_idx, 0, 1]
+                    recall_100 = recalls[:, novel_idx, 0, -1]
+                    recall_s = recalls[:, novel_idx, 1, -1]
+                    recall_m = recalls[:, novel_idx, 2, -1]
+                    recall_l = recalls[:, novel_idx, 3, -1]
+
+                    novel_results_per_category['ar_1'] = np.mean(recall_1[recall_1>-1])
+                    novel_results_per_category['ar_10'] = np.mean(recall_10[recall_10>-1])
+                    novel_results_per_category['ar_100'] = np.mean(recall_100[recall_100>-1])
+                    novel_results_per_category['ar_s'] = np.mean(recall_s[recall_s>-1])
+                    novel_results_per_category['ar_m'] = np.mean(recall_m[recall_m>-1])
+                    novel_results_per_category['ar_l'] = np.mean(recall_l[recall_l>-1])
+
+                    for idx, catId in enumerate(self.cat_ids):
+                        # area range index 0: all area ranges
+                        # max dets index -1: typically 100 per image
+                        nm = self.coco.loadCats(catId)[0]
+                        precision = precisions[:, :, idx, 0, -1]
+
+                        if precision.size:
+                            ap = np.mean(precision)
+                        else:
+                            ap = float('nan')
+
+                        results_per_category.append(
+                            (f'{nm["name"]}', f'{float(ap):0.3f}'))
+
+                        if nm['name'] in self.BASE_CLASSES:
+                            ap_base_category.append(float(ap))
+
+                    num_columns = min(6, len(results_per_category) * 2)
+                    results_flatten = list(
+                        itertools.chain(*results_per_category))
+                    headers = ['category', 'AP'] * (num_columns // 2)
+                    results_2d = itertools.zip_longest(*[
+                        results_flatten[i::num_columns]
+                        for i in range(num_columns)
+                    ])
+                    table_data = [headers]
+                    table_data += [result for result in results_2d]
+                    table = AsciiTable(table_data)
+                    print_log('\n' + table.table, logger=logger)
+                    for key, val in novel_results_per_category.items():
+                        print_log(key + ': ' + f'{float(val):0.3f}', logger=logger)
+                    print_log('base: ' + f'{float(np.array(ap_base_category).mean()):0.3f}', logger=logger)
+
                 metric_items = [
                     'mAP', 'mAP_50', 'mAP_75', 'mAP_s', 'mAP_m', 'mAP_l'
                 ]

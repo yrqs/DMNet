@@ -50,10 +50,13 @@ class FeatureAdaption(nn.Module):
         normal_init(self.conv_offset, std=0.1)
         normal_init(self.conv_adaption, std=0.01)
 
-    def forward(self, x, shape):
+    def forward(self, x, shape, save_out=False):
         offset = self.conv_offset(shape.detach())
         x = self.relu(self.conv_adaption(x, offset))
-        return x
+        if save_out:
+            return x, offset
+        else:
+            return x
 
 class FeatureAdaptionCls(nn.Module):
     """Feature Adaption Module.

@@ -6,6 +6,9 @@ from mmdet.core import auto_fp16
 from mmdet.ops import ConvModule
 from ..registry import NECKS
 
+import torch
+import os
+import random
 
 @NECKS.register_module
 class FPN(nn.Module):
@@ -59,7 +62,10 @@ class FPN(nn.Module):
                  no_norm_on_lateral=False,
                  conv_cfg=None,
                  norm_cfg=None,
-                 act_cfg=None):
+                 act_cfg=None,
+                 save_outs=False,
+                 freeze=False,
+                 freeze_ratio=10):
         super(FPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels
@@ -69,7 +75,7 @@ class FPN(nn.Module):
         self.relu_before_extra_convs = relu_before_extra_convs
         self.no_norm_on_lateral = no_norm_on_lateral
         self.fp16_enabled = False
-
+        self.save_outs = save_outs
         if end_level == -1:
             self.backbone_end_level = self.num_ins
             assert num_outs >= self.num_ins - start_level
@@ -128,6 +134,9 @@ class FPN(nn.Module):
                     inplace=False)
                 self.fpn_convs.append(extra_fpn_conv)
 
+        if freeze:
+            for idx, p in enumerate(self.parameters()):
+                p.requires_grad = False
     # default init_weights for conv(msra) and norm in ConvModule
     def init_weights(self):
         for m in self.modules():
@@ -143,6 +152,9 @@ class FPN(nn.Module):
             lateral_conv(inputs[i + self.start_level])
             for i, lateral_conv in enumerate(self.lateral_convs)
         ]
+
+        if self.save_outs:
+            laterals_ori = [l.clone() for l in laterals]
 
         # build top-down path
         used_backbone_levels = len(laterals)
@@ -175,4 +187,17 @@ class FPN(nn.Module):
                         outs.append(self.fpn_convs[i](F.relu(outs[-1])))
                     else:
                         outs.append(self.fpn_convs[i](outs[-1]))
+        if self.save_outs:
+            res = dict()
+            res['laterals'] = laterals
+            res['laterals_ori'] = laterals_ori
+            res['fpn_outs'] = outs
+            save_idx = 1
+            save_path_base = 'mytest/fpn_outs.pth'
+            save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
+            while os.path.exists(save_path):
+                save_idx += 1
+                save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
+            torch.save(res, save_path)
+
         return tuple(outs)

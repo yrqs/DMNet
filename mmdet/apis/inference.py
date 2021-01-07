@@ -1,5 +1,8 @@
 import warnings
 
+import matplotlib
+matplotlib.use('TKAgg')  # or whatever other backend that you want
+
 import matplotlib.pyplot as plt
 import mmcv
 import numpy as np
@@ -203,5 +206,9 @@ def show_result_pyplot(img,
     """
     img = show_result(
         img, result, class_names, score_thr=score_thr, show=False)
-    plt.figure(figsize=fig_size)
-    plt.imshow(mmcv.bgr2rgb(img))
+    print(img)
+    # plt.figure(figsize=fig_size)
+    # plt.imshow(mmcv.bgr2rgb(img))
+    plt.figure()
+    plt.imshow(img)
+    plt.pause(100)

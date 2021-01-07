@@ -19,6 +19,56 @@ except ImportError:
     albumentations = None
     Compose = None
 
+@PIPELINES.register_module
+class Expand_img(object):
+    """Random expand the image & bboxes.
+
+    Randomly place the original image on a canvas of 'ratio' x original image
+    size filled with mean values. The ratio is in the range of ratio_range.
+
+    Args:
+        mean (tuple): mean value of dataset.
+        to_rgb (bool): if need to convert the order of mean to align with RGB.
+        ratio_range (tuple): range of expand ratio.
+        prob (float): probability of applying this transformation
+    """
+
+    def __init__(self,
+                 mean=(0, 0, 0),
+                 to_rgb=True,
+                 ratio=2,
+                 seg_ignore_label=None):
+        self.to_rgb = to_rgb
+        self.ratio = ratio
+        if to_rgb:
+            self.mean = mean[::-1]
+        else:
+            self.mean = mean
+        self.seg_ignore_label = seg_ignore_label
+
+    def __call__(self, results):
+        img = results['img']
+
+        h, w, c = img.shape
+        ratio = self.ratio
+        expand_img = np.full((int(h * ratio), int(w * ratio), c),
+                             self.mean).astype(img.dtype)
+        # left = int(random.uniform(0, w * ratio - w))
+        # top = int(random.uniform(0, h * ratio - h))
+        left = 0
+        top = 0
+        expand_img[top:top + h, left:left + w] = img
+
+        results['img'] = expand_img
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += '(mean={}, to_rgb={}, ratio_range={}, ' \
+                    'seg_ignore_label={})'.format(
+            self.mean, self.to_rgb, self.ratio_range,
+            self.seg_ignore_label)
+        return repr_str
 
 @PIPELINES.register_module
 class Resize(object):

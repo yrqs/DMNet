@@ -116,4 +116,4 @@ work_dirs/
 
 # Pytorch
 *.pth
-test1/
+mytest/
