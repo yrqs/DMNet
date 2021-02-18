@@ -10,7 +10,8 @@ import torch
 from ..builder import build_loss
 import torch.nn.functional as F
 
-from mmdet.core import (anchor_target, force_fp32, multi_apply)
+from mmdet.core import (anchor_target, delta2bbox, force_fp32,
+                        multi_apply, multiclass_nms)
 
 
 @HEADS.register_module
@@ -289,3 +290,59 @@ class RetinaDMLHead2(AnchorHead):
             avg_factor=max(1, num_total_samples))
         # avg_factor=max(1, int(distance.size(1))))
         return loss_emb
+
+    def get_bboxes_single(self,
+                          cls_score_list,
+                          bbox_pred_list,
+                          mlvl_anchors,
+                          img_shape,
+                          scale_factor,
+                          cfg,
+                          rescale=False):
+        """
+        Transform outputs for a single batch item into labeled boxes.
+        """
+        assert len(cls_score_list) == len(bbox_pred_list) == len(mlvl_anchors)
+        mlvl_bboxes = []
+        mlvl_scores = []
+        for cls_score, bbox_pred, anchors in zip(cls_score_list,
+                                                 bbox_pred_list, mlvl_anchors):
+            assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
+            cls_score = cls_score.permute(1, 2,
+                                          0).reshape(-1, self.cls_out_channels)
+            if self.use_sigmoid_cls:
+                scores = cls_score.sigmoid()
+            else:
+                scores = cls_score.softmax(-1)
+            bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
+            nms_pre = cfg.get('nms_pre', -1)
+            if nms_pre > 0 and scores.shape[0] > nms_pre:
+                # Get maximum scores for foreground classes.
+                if self.use_sigmoid_cls:
+                    max_scores, _ = scores.max(dim=1)
+                else:
+                    max_scores, _ = scores[:, 1:].max(dim=1)
+                _, topk_inds = max_scores.topk(nms_pre)
+                anchors = anchors[topk_inds, :]
+                bbox_pred = bbox_pred[topk_inds, :]
+                scores = scores[topk_inds, :]
+            bboxes = delta2bbox(anchors, bbox_pred, self.target_means,
+                                self.target_stds, img_shape)
+            mlvl_bboxes.append(bboxes)
+            mlvl_scores.append(scores)
+        if len(mlvl_bboxes) == 0:
+            mlvl_bboxes.append(torch.tensor([[0., 0., 1e-10, 1e-10]]))
+        mlvl_bboxes = torch.cat(mlvl_bboxes)
+        if rescale:
+            mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
+        if len(mlvl_scores) == 0:
+            mlvl_scores.append(torch.tensor([[0.]]))
+        mlvl_scores = torch.cat(mlvl_scores)
+        if self.use_sigmoid_cls:
+            # Add a dummy background class to the front when using sigmoid
+            padding = mlvl_scores.new_zeros(mlvl_scores.shape[0], 1)
+            mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)
+        det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores,
+                                                cfg.score_thr, cfg.nms,
+                                                cfg.max_per_img)
+        return det_bboxes, det_labels

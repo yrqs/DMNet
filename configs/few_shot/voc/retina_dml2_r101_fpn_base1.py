@@ -22,8 +22,8 @@ model = dict(
         num_classes=21,
         in_channels=256,
         stacked_convs=2,
-        emb_sizes = (256, 64),
-        num_modes = 1,
+        emb_sizes=(256, 128),
+        num_modes=1,
         sigma=0.5,
         feat_channels=256,
         octave_base_scale=4,
@@ -126,7 +126,7 @@ data = dict(
 
 evaluation = dict(interval=2, metric='mAP')
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*2*1, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -150,5 +150,5 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/retinanet_r101_fpn_1x'
 load_from = None
-resume_from = 'work_dirs/retina_dml2_fpn_emb256_64_alpha015_le10_CE_voc_base1_r1_lr00025x2x2_10_14_16/epoch_4.pth'
+resume_from = None
 workflow = [('train', 1)]

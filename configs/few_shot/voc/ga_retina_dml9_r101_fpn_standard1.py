@@ -1,12 +1,12 @@
 # model settings
 
 save_outs = False
-shot = 3
+shot = 5
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [25, 30, 20, 6, 3][shot_idx]
+train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
 freeze1 = False
-neg_pos_ratio = 10
+neg_pos_ratio = 3
 
 model = dict(
     type='RetinaNet',
@@ -33,7 +33,7 @@ model = dict(
         num_classes=21,
         in_channels=256,
         stacked_convs=2,
-        emb_sizes=(256, 64),
+        emb_sizes=(256, 128),
         num_modes=1,
         sigma=0.5,
         feat_channels=256,
@@ -110,8 +110,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
-    # dict(type='MinIoURandomCrop'),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -162,15 +162,15 @@ data = dict(
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.0001*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0001*2*1, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=1000,
     warmup_ratio=1.0 / 3,
-    step=[10, 14])
+    step=[12, 16])
 checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
@@ -181,10 +181,11 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 16
+total_epochs = 18
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml9_fpn_emb256_64_alpha015_le10_CE_nratio3_voc_base1_lr00025x2x2_10_14_16/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dml9_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml9_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16_init_rep.pth'
 resume_from = None
 workflow = [('train', 1)]

@@ -1,12 +1,12 @@
 # model settings
 
 save_outs = False
-shot = 1
+shot = 10
 shot_idx = [1, 2, 3, 5, 10].index(shot)
 train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
-freeze = False
+freeze = True
 freeze1 = False
-neg_pos_ratio = 10
+neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
              (128, 256)][1]
@@ -15,7 +15,7 @@ stacked_convs = 2
 alpha = 0.15
 
 warmup_iters = 1000
-lr_step = [10, 14, 16]
+lr_step = [12, 16, 18]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 2
@@ -208,8 +208,9 @@ work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 
 # load_from = 'work_dirs/ga_retina_dml3_s2_fpn_emb256_64_alpha015_le10_CE_nratio3_voc_base3_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
 # load_from = 'work_dirs/ga_retina_dml3_s2_fpn_emb256_64_alpha015_le10_CE_nratio3_voc_base3_r1_lr00025x2x1_10_14_16_ind1_2/epoch_16.pth'
+
 load_from = 'work_dirs/ga_retina_dml3_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base3_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dml3_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base3_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16_init_rep.pth'
 
 resume_from = None
-
 workflow = [('train', 1)]

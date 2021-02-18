@@ -1,10 +1,10 @@
 # model settings
 
-save_outs = False
+save_outs = True
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
-             (128, 256)][0]
+             (128, 256)][1]
 stacked_convs = 2
 
 alpha = 0.15

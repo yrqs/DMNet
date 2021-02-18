@@ -10,7 +10,7 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        # frozen_stages=1,
+        frozen_stages=1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'),
     neck=dict(
@@ -103,8 +103,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
-    # dict(type='MinIoURandomCrop'),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -173,7 +173,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[10, 14])
+    step=[14, 18])
 checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
@@ -184,10 +184,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 16
+total_epochs = 20
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
-resume_from = None
+resume_from = 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_aug_base1_r1_lr00025x2x2_10_14_16_ind2_1/epoch_10_new_step.pth'
 workflow = [('train', 1)]

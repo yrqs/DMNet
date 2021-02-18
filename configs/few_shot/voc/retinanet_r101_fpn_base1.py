@@ -1,10 +1,12 @@
 # model settings
 
-save_outs = True
+save_outs = False
 
-anchor_set_idx = 0
-scales_per_octave = [3, 1][anchor_set_idx]
+scales_per_octave = 3
+anchor_set_idx = [3, 1].index(scales_per_octave)
 anchor_ratios = [[0.5, 1.0, 2.0], [1.0]][anchor_set_idx]
+
+stacked_convs = 2
 
 model = dict(
     type='RetinaNet',
@@ -29,7 +31,7 @@ model = dict(
         type='RetinaHead',
         num_classes=21,
         in_channels=256,
-        stacked_convs=2,
+        stacked_convs=stacked_convs,
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=scales_per_octave,
@@ -127,7 +129,7 @@ data = dict(
 
 evaluation = dict(interval=2, metric='mAP')
 # optimizer
-optimizer = dict(type='SGD', lr=0.00125*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00125*2*4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(

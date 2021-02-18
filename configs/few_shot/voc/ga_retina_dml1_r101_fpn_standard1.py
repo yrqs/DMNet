@@ -1,12 +1,12 @@
 # model settings
 
-shot = 3
+save_outs = False
+shot = 5
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [50, 30, 20, 6, 3][shot_idx]
+train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
-emb_sizes = [(1024, 256), (256, 64)][0]
 
 model = dict(
     type='RetinaNet',
@@ -26,14 +26,15 @@ model = dict(
         start_level=1,
         add_extra_convs=True,
         num_outs=5,
+        save_outs=save_outs,
         freeze=freeze),
     bbox_head=dict(
         type='GARetinaDMLHead1',
         num_classes=21,
         in_channels=256,
         stacked_convs=2,
-        emb_sizes=emb_sizes,
-        num_modes = 1,
+        emb_sizes=(256, 128),
+        num_modes=1,
         sigma=0.5,
         feat_channels=256,
         octave_base_scale=4,
@@ -45,7 +46,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.01,
         freeze=freeze1,
         loss_loc=dict(
             type='FocalLoss',
@@ -54,15 +55,15 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
-        # loss_cls=dict(
-        #     type='FocalLoss',
-        #     use_sigmoid=False,
-        #     gamma=2.0,
-        #     alpha=0.25,
-        #     loss_weight=1.0),
-        loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+        loss_cls=dict(
+            type='FocalLoss',
+            use_sigmoid=False,
+            gamma=2.0,
+            alpha=0.25,
+            loss_weight=1.0),
+        # loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.7),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=0.25)))
+        loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -84,11 +85,11 @@ train_cfg = dict(
         min_pos_iou=0,
         ignore_iof_thr=-1),
     sampler=dict(
-            type='RandomSampler',
-            num=256,
-            pos_fraction=0.5,
-            neg_pos_ub=-1,
-            add_gt_as_proposals=False),
+        type='RandomSampler',
+        num=256,
+        pos_fraction=0.5,
+        neg_pos_ub=-1,
+        add_gt_as_proposals=False),
     allowed_border=-1,
     pos_weight=-1,
     center_ratio=0.2,
@@ -109,8 +110,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
-    # dict(type='MinIoURandomCrop'),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -161,13 +162,13 @@ data = dict(
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.0001*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0001*2*1, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=1000,
     warmup_ratio=1.0 / 3,
     step=[12, 16])
 checkpoint_config = dict(interval=2)
@@ -184,6 +185,7 @@ total_epochs = 18
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = './work_dirs/ga_retina_dml1_fpn_emb1024_256_alpha015_le025_voc_base_r1_lr00025x2x2_10_14_16/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dml1_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml1_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16_init_rep.pth'
 resume_from = None
 workflow = [('train', 1)]

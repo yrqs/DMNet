@@ -6,6 +6,9 @@ from ..registry import HEADS
 from ..utils import bias_init_with_prob
 from .guided_anchor_head import FeatureAdaption, GuidedAnchorHead
 
+from mmdet.core import multi_apply
+import torch
+import os
 
 @HEADS.register_module
 class GARetinaHead(GuidedAnchorHead):
@@ -18,10 +21,12 @@ class GARetinaHead(GuidedAnchorHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  freeze=False,
+                 save_outs=False,
                  **kwargs):
         self.stacked_convs = stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+        self.save_outs = save_outs
         # print('conv_cfg: ', conv_cfg)
         super(GARetinaHead, self).__init__(num_classes, in_channels, **kwargs)
 
@@ -104,11 +109,15 @@ class GARetinaHead(GuidedAnchorHead):
         loc_pred = self.conv_loc(cls_feat)
         shape_pred = self.conv_shape(reg_feat)
 
-        cls_feat = self.feature_adaption_cls(cls_feat, shape_pred)
-        reg_feat = self.feature_adaption_reg(reg_feat, shape_pred)
+        if self.save_outs:
+            cls_feat, offset_cls = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)
+            reg_feat, offset_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
+        else:
+            cls_feat = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)
+            reg_feat = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
+        # cls_feat = self.feature_adaption_cls(cls_feat, shape_pred)
+        # reg_feat = self.feature_adaption_reg(reg_feat, shape_pred)
 
-        # print('cls_feat.size: ', cls_feat.size())
-        # print('cls_feat.type: ', type(cls_feat))
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
         else:
@@ -116,4 +125,27 @@ class GARetinaHead(GuidedAnchorHead):
         cls_score = self.retina_cls(cls_feat, mask)
         bbox_pred = self.retina_reg(reg_feat, mask)
 
-        return cls_score, bbox_pred, shape_pred, loc_pred
+        if self.save_outs:
+            return cls_score, bbox_pred, shape_pred, loc_pred, offset_cls, offset_reg
+        else:
+            return cls_score, bbox_pred, shape_pred, loc_pred
+
+    def forward(self, feats):
+        if self.training:
+            return multi_apply(self.forward_single, feats)
+        else:
+            if self.save_outs:
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds, offsets_cls, offsets_reg = multi_apply(self.forward_single, feats)
+                res = dict()
+                res['offsets_cls'] = offsets_cls
+                res['offsets_reg'] = offsets_reg
+                save_idx = 1
+                save_path_base = 'mytest/ga_retina_feature.pth'
+                save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
+                while os.path.exists(save_path):
+                    save_idx += 1
+                    save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
+                torch.save(res, save_path)
+            else:
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds = multi_apply(self.forward_single, feats)
+            return cls_scores, bbox_preds, shape_preds_reg, loc_preds

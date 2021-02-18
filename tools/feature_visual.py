@@ -112,6 +112,59 @@ def reps_visual(reps, dim=2):
         plt.yticks([])
         plt.show()
 
+def show_emb_vectors_TSNE(outs, dim=2):
+
+    def select_color(i):
+        if i <= 8:
+            return plt.cm.Set1(i)
+        elif i <= 16:
+            return plt.cm.Set2(i-9)
+        elif i <= 28:
+            return plt.cm.Set3(i-17)
+    '''t-SNE'''
+    emb_vectors_tuple = outs['emb_vectors']
+    reps_tuple = outs['reps']
+
+    plt.figure(figsize=(6, 6))
+    # for i in range(len(reps_tuple)):
+    for i in range(len(reps_tuple)-1, len(reps_tuple)):
+        reps = reps_tuple[i]
+        reps = reps.contiguous().view(-1, reps.size(-1))
+        emb_vectors = emb_vectors_tuple[i]
+        emb_vectors = emb_vectors[0]
+        emb_vectors = emb_vectors.permute(1, 2, 0).contiguous()
+        emb_vectors = emb_vectors.view(-1, emb_vectors.size(-1))
+
+        vectors = torch.cat([emb_vectors, reps], 0)
+        print(vectors.size())
+        vectors = vectors.numpy()
+        tsne = manifold.TSNE(n_components=3, init='pca', random_state=101)
+        X_tsne = tsne.fit_transform(vectors)
+        x_min, x_max = X_tsne.min(0), X_tsne.max(0)
+        X_tsne = (X_tsne - x_min) / (x_max - x_min)  # 归一化
+        plt.plot(X_tsne[:-20, 0], X_tsne[:-20, 1], 'r.')
+        plt.plot(X_tsne[-20:, 0], X_tsne[-20:, 1], 'g.')
+
+        # reps = reps.numpy().reshape(-1, reps.size(-1))
+        # tsne_rep = manifold.TSNE(n_components=3, init='pca', random_state=101)
+        # X_tsne_rep = tsne_rep.fit_transform(reps)
+        # x_min_rep, x_max_rep = X_tsne_rep.min(0), X_tsne_rep.max(0)
+        #
+        # emb_vectors = emb_vectors.numpy().reshape(-1, emb_vectors.size(-1))
+        # tsne_emb = manifold.TSNE(n_components=3, init='pca', random_state=101)
+        # X_tsne_emb = tsne_emb.fit_transform(emb_vectors)
+        # x_min_emb, x_max_emb = X_tsne_emb.min(0), X_tsne_emb.max(0)
+        #
+        # X_norm_emb = (X_tsne_emb - x_min) / (x_max - x_min)  # 归一化
+        # X_norm_rep = (X_tsne_rep - x_min) / (x_max - x_min)  # 归一化
+        # plt.plot(X_norm_rep[:, 0], X_norm_rep[:, 1], 'r.')
+        # plt.plot(X_norm_emb[:, 0], X_norm_emb[:, 1], 'g.')
+
+        plt.xticks([])
+        plt.yticks([])
+        plt.show()
+
+
 def distance(a, b):
     return torch.sqrt(torch.sum((a - b)**2, dim=-1))
 
@@ -243,6 +296,10 @@ def plot_feature_pyramids_similarity(feature_pyramids1, feature_pyramids2):
     similarity = np.vstack(similarity)
     plot_similarity(similarity)
 
+CLASSES_VOC = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+               'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
+               'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
+
 if __name__ == '__main__':
     file_outs_dict  = {
         'FPN' : ('fpn_outs.pth', ['laterals_ori', 'laterals', 'fpn_outs']),
@@ -299,11 +356,12 @@ if __name__ == '__main__':
     feature_pyramids_similarity_list = []
     for i in range(file_num):
         file_name = file_name_base[:-4] + str(i+1) + file_name_base[-4:]
-        outs = torch.load(file_name)
+        outs = torch.load(file_name, map_location=torch.device("cpu"))
         # show_feature_pyramids_L2(outs, outs_names)
         # plot_feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'])
         # show_cls_feat_enhances(outs)
-        show_offsets(outs)
+        show_emb_vectors_TSNE(outs)
+        # show_offsets(outs)
         # show_reg_feat_enhances(outs)
         # show_feature_pyramids(outs, outs_names)
         # show_emb_vectors(outs)

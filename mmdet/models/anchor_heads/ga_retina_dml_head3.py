@@ -252,9 +252,10 @@ class GARetinaDMLHead3(GuidedAnchorHead):
             return cls_score, bbox_pred, shape_pred, loc_pred, distances
         else:
             if self.save_outs:
-                return cls_score.log(), bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg
+                return cls_score.log(), bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, reps, offset_cls, offset_reg
             else:
-                return cls_score.log(), bbox_pred, shape_pred, loc_pred
+                # return cls_score.log(), bbox_pred, shape_pred, loc_pred
+                return cls_score, bbox_pred, shape_pred, loc_pred
 
 
     def forward(self, feats):
@@ -262,8 +263,9 @@ class GARetinaDMLHead3(GuidedAnchorHead):
             return multi_apply(self.forward_single, feats)
         else:
             if self.save_outs:
-                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, offsets_cls, offsets_reg = multi_apply(self.forward_single, feats)
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, reps, offsets_cls, offsets_reg = multi_apply(self.forward_single, feats)
                 res = dict()
+                res['cls_scores'] = cls_scores
                 res['cls_feat'] = cls_feat
                 res['reg_feat'] = reg_feat
                 res['cls_feat_adp'] = cls_feat_adp
@@ -271,6 +273,7 @@ class GARetinaDMLHead3(GuidedAnchorHead):
                 res['cls_loc'] = loc_preds
                 res['cls_feat_enhance'] = cls_feat_enhance_pres
                 res['emb_vectors'] = emb_vectors
+                res['reps'] = reps
                 res['offsets_cls'] = offsets_cls
                 res['offsets_reg'] = offsets_reg
                 save_idx = 1
@@ -509,8 +512,8 @@ class GARetinaDMLHead3(GuidedAnchorHead):
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
-                scores = cls_score.softmax(-1)
-                # scores = cls_score
+                # scores = cls_score.softmax(-1)
+                scores = cls_score
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
             # filter scores, bbox_pred w.r.t. mask.
             # anchors are filtered in get_anchors() beforehand.

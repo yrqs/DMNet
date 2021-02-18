@@ -1,13 +1,16 @@
 # model settings
 
 save_outs = False
+
 shot = 10
 shot_idx = [10, 30].index(shot)
 train_repeat_times = [10, 5][shot_idx]
-freezeB = False
+emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
+             (512, 128), (256, 256), (128, 128), (128, 64),
+             (128, 256)][3]
 freeze = False
 freeze1 = False
-neg_pos_ratio = 10
+neg_pos_ratio = 3
 
 model = dict(
     type='RetinaNet',
@@ -17,7 +20,7 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=4 if freezeB else 1,
+        frozen_stages=4 if freeze else 1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'),
     neck=dict(
@@ -34,7 +37,7 @@ model = dict(
         num_classes=81,
         in_channels=256,
         stacked_convs=2,
-        emb_sizes = (256, 64),
+        emb_sizes=emb_sizes,
         num_modes = 1,
         sigma=0.5,
         feat_channels=256,
@@ -137,7 +140,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    imgs_per_gpu=2,
+    imgs_per_gpu=1,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
@@ -165,7 +168,7 @@ data = dict(
 evaluation = dict(interval=2, metric='bbox')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.0001*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0001*1*2, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -190,9 +193,15 @@ log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 # load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha005_le10_CE_nratio3_coco_base_lr00025x2x1_10_14_16/epoch_16.pth'
 # load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_12_16_18_ind1_1/epoch_16.pth'
-load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind2_1/epoch_24.pth'
 
-resume_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio10_coco_aug_standard_10shot_r10_lr0001x2x2_14_18_20_ind2_1_1/epoch_8.pth'
-# resume_from = None
+# load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind2_1/epoch_24.pth'
+
+# load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_128_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind1_1/epoch_24.pth'
+# load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_128_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind1_1/epoch_24_init_rep.pth'
+
+load_from = 'work_dirs/ga_retina_dml3_fpn_emb256_32_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind1_1/epoch_24.pth'
+
+# resume_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio10_coco_aug_standard_10shot_r10_lr0001x2x2_14_18_20_ind2_1_1/epoch_8.pth'
+resume_from = None
 
 workflow = [('train', 1)]

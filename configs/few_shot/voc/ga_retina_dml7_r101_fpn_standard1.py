@@ -1,12 +1,12 @@
 # model settings
 
 save_outs = False
-shot = 2
+shot = 3
 shot_idx = [1, 2, 3, 5, 10].index(shot)
 train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
 freeze1 = False
-neg_pos_ratio = 3
+neg_pos_ratio = 10
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
              (128, 256)][1]
@@ -14,7 +14,7 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500
+warmup_iters = 1000
 lr_step = [14, 18, 20]
 interval = 2
 lr_base = 0.0001
@@ -29,6 +29,7 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
+        # frozen_stages=2,
         frozen_stages=4 if freeze else 1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'),
@@ -124,7 +125,7 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
+    dict(type='Expand'),
     dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
@@ -207,7 +208,10 @@ log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 
 
-load_from = 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_aug_base1_r1_lr00025x2x2_10_14_16_ind2_1/epoch_16.pth'
+
+load_from = 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_aug_base1_r1_lr00025x2x2_14_18_20_ind4_1/epoch_20.pth'
 
 resume_from = None
 

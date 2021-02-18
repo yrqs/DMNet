@@ -1,6 +1,9 @@
 # model settings
 
 save_outs = False
+emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
+             (512, 128), (256, 256), (128, 128), (128, 64),
+             (128, 256)][3]
 
 model = dict(
     type='RetinaNet',
@@ -26,7 +29,7 @@ model = dict(
         num_classes=81,
         in_channels=256,
         stacked_convs=2,
-        emb_sizes = (256, 64),
+        emb_sizes=emb_sizes,
         num_modes = 1,
         sigma=0.5,
         feat_channels=256,
@@ -165,7 +168,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[20, 24])
+    step=[16, 22])
 checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
@@ -176,10 +179,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 26
+total_epochs = 24
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
-resume_from = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio3_coco_base_r1_lr00025x2x2_16_22_24_ind2_1/epoch_16_new_step.pth'
+resume_from = None
 workflow = [('train', 1)]

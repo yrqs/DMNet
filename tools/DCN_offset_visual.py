@@ -14,6 +14,9 @@ config_file = 'configs/few_shot/voc/voc_test.py'
 
 file_outs_dict  = {
     'ga_retina_dml3' : 'ga_retina_dml3_feature.pth',
+    'ga_retina_dml7' : 'ga_retina_dml7_feature.pth',
+    'ga_retina_dml8' : 'ga_retina_dml8_feature.pth',
+    'ga_retina' : 'ga_retina_feature.pth',
 }
 
 offset_base = [[-1, -1], [0, -1], [1, -1],
@@ -59,8 +62,8 @@ def show_offset_all(offsets, level, img_h):
         positions_offset_list.append(positions_offset)
 
     plt.imshow(img)
-    x = 4
-    y = 5
+    x = 2
+    y = 2
     for positions_ori, positions_offset in zip(positions_ori_list, positions_offset_list):
         pos_ori = positions_ori[y, x]
         # pos_ori = positions_ori[:, :]
@@ -68,32 +71,42 @@ def show_offset_all(offsets, level, img_h):
         pos_offset = positions_offset[y, x]
         # pos_offset = positions_offset[:, :]
         pos_offset = pos_offset.view(-1, 2)
-        plt.scatter(pos_ori[:, 1], pos_ori[:, 0], s=10, c='y', alpha=1)
-        plt.scatter(pos_offset[:, 0], pos_offset[:, 1], s=10, c='r', alpha=1)
+        plt.scatter(pos_ori[:, 1], pos_ori[:, 0], s=5, c='y', alpha=1)
+        plt.scatter(pos_offset[:, 0], pos_offset[:, 1], s=5, c='r', alpha=1)
     plt.show()
 
-def show_offset_center(offsets, step, level):
+def show_offset_center(offsets, step, level, i=0):
     offset = offsets[level]
     offset = offset.squeeze(0)
     centers = torch.ones_like(offset[0]).nonzero().float() + 0.5
     centers = centers.view(offset.size(1), offset.size(2), 2)
 
+    centers = centers + torch.tensor(offset_base[1]).float()
+
+    feature_w = offset.size(2)
+    feature_h = offset.size(1)
     offset = offset.permute(1, 2, 0).contiguous()
 
-    x_idx = 8 + 18*2
-    y_idx = 9 + 18*2
+    x_idx = 1 + 18*0
+    y_idx = 10 + 18*0
 
-    offset_x = offset[:, :, x_idx].unsqueeze(-1)
-    offset_y = offset[:, :, y_idx].unsqueeze(-1)
+    scale = 10
+
+    offset_x = offset[:, :, x_idx].unsqueeze(-1) * feature_w
+    offset_y = offset[:, :, y_idx].unsqueeze(-1) * feature_h
 
     centers_offset = centers + torch.cat([offset_y, offset_x], dim=-1)
+
+    coordinates_offset_x = centers_offset.view(-1, 2)[:, 1].clamp(-0.5, feature_w+1)
+    coordinates_offset_y = centers_offset.view(-1, 2)[:, 0].clamp(-0.5, feature_h+1)
+    centers_offset = torch.cat([coordinates_offset_y.unsqueeze(-1), coordinates_offset_x.unsqueeze(-1)], dim=-1).view_as(centers_offset)
 
     centers *= step
     centers_offset *= step
 
     centers = centers.view(-1, 2)
     centers_offset = centers_offset.view(-1, 2)
-
+    plt.figure(i)
     plt.imshow(img)
     # plt.scatter(centers[:, 1], centers[:, 0], s=10, c='g', alpha=1)
     plt.scatter(centers_offset[:, 1], centers_offset[:, 0], s=10, c='r', alpha=1)
@@ -102,7 +115,8 @@ def show_offset_center(offsets, step, level):
 if __name__ == '__main__':
 
     feature_type = 'ga_retina_dml3'
-    root_path = 'mytest/'
+    # root_path = 'mytest/'
+    root_path = 'mytest/ga_retina_dml3_fpn_1shot/'
 
     file_name_base = file_outs_dict[feature_type]
     file_name_base = root_path + file_name_base
@@ -117,13 +131,6 @@ if __name__ == '__main__':
         dist=False,
         shuffle=False)
 
-    # for data in data_loader:
-    #     img = data['img'][0]
-    #     img = img.squeeze(0)
-    #     print(img.shape)
-    #     plt.imshow(img)
-    #     plt.show()
-
     for i, data in enumerate(data_loader):
         img = data['img'][0]
         img = img.squeeze(0)
@@ -134,15 +141,13 @@ if __name__ == '__main__':
         outs = torch.load(file_name, map_location=torch.device("cpu"))
 
         offsets_cls = outs['offsets_cls']
-        level = -3
+        level = -2
         feature_h = offsets_cls[level].size(2)
         step = img_h // feature_h
-        show_offset_center(offsets_cls, step, level)
+        show_offset_center(offsets_cls, step, level, i)
         # show_offset_all(offsets_cls, level, img_h)
         # offsets_cls = outs['offsets_reg']
         # group_num = offsets_cls[0].size(1) // 9 // 2
 
         offsets_reg = outs['offsets_reg']
         show_offset_center(offsets_reg, step, level)
-
-

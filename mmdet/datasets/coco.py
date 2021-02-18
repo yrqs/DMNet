@@ -426,7 +426,8 @@ class CocoDataset(CustomDataset):
                         if nm['name'] in self.NOVEL_CLASSES:
                             novel_idx.append(idx)
                         else:
-                            novel_idx.append(idx)
+                            pass
+                            # novel_idx.append(idx)
 
                     precision_novel = precisions[:, :, novel_idx, 0, -1]
                     precision_05_novel = precisions[0, :, novel_idx, 0, -1]

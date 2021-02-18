@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 from mmcv.cnn import bias_init_with_prob
 
-checkpoint_path = 'work_dirs/ga_retina_dml3_dfpn2_emb256_64_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16/epoch_16.pth'
+# checkpoint_path = 'work_dirs/ga_retina_dml3_dfpn2_emb256_64_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16/epoch_16.pth'
+checkpoint_path = 'work_dirs/ga_retina_dml9_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base2_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
 
 checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
 
-init_type = ['head', 'head1', 'head2', 'rep'][0]
+init_type = ['head', 'head1', 'head2', 'rep'][3]
 changes = {
     'head':
         ['bbox_head.retina_cls.weight',
@@ -70,4 +71,4 @@ def change_rep():
     torch.save(checkpoint, new_checkpoint_path)
 
 if __name__ == '__main__':
-    change_rep()
+    init_weights()
