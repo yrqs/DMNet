@@ -79,6 +79,8 @@ def show_offset_center(offsets, step, level, i=0):
     offset = offsets[level]
     offset = offset.squeeze(0)
     centers = torch.ones_like(offset[0]).nonzero().float() + 0.5
+    centers[:, 1] += 1
+    # print(centers.size())
     centers = centers.view(offset.size(1), offset.size(2), 2)
 
     centers = centers + torch.tensor(offset_base[1]).float()
@@ -86,37 +88,44 @@ def show_offset_center(offsets, step, level, i=0):
     feature_w = offset.size(2)
     feature_h = offset.size(1)
     offset = offset.permute(1, 2, 0).contiguous()
+    print(offset.size())
+    centers_offsets = []
+    for i in [3]:
+        x_idx = 9 + 18*i
+        y_idx = 8 + 18*i
 
-    x_idx = 1 + 18*0
-    y_idx = 10 + 18*0
+        scale = 10
 
-    scale = 10
+        # offset_x = offset[:, :, x_idx].unsqueeze(-1) * feature_w
+        # offset_y = offset[:, :, y_idx].unsqueeze(-1) * feature_h
+        offset_x = offset[:, :, x_idx].unsqueeze(-1)
+        offset_y = offset[:, :, y_idx].unsqueeze(-1)
 
-    offset_x = offset[:, :, x_idx].unsqueeze(-1) * feature_w
-    offset_y = offset[:, :, y_idx].unsqueeze(-1) * feature_h
+        centers_offset = centers + torch.cat([offset_y, offset_x], dim=-1)
 
-    centers_offset = centers + torch.cat([offset_y, offset_x], dim=-1)
+        coordinates_offset_x = centers_offset.view(-1, 2)[:, 1].clamp(-0.5, feature_w+1)
+        coordinates_offset_y = centers_offset.view(-1, 2)[:, 0].clamp(-0.5, feature_h+1)
+        centers_offset = torch.cat([coordinates_offset_y.unsqueeze(-1), coordinates_offset_x.unsqueeze(-1)], dim=-1).view_as(centers_offset)
+        centers_offsets.append(centers_offset)
 
-    coordinates_offset_x = centers_offset.view(-1, 2)[:, 1].clamp(-0.5, feature_w+1)
-    coordinates_offset_y = centers_offset.view(-1, 2)[:, 0].clamp(-0.5, feature_h+1)
-    centers_offset = torch.cat([coordinates_offset_y.unsqueeze(-1), coordinates_offset_x.unsqueeze(-1)], dim=-1).view_as(centers_offset)
-
+    centers_offsets = torch.cat(centers_offsets, dim=0)
     centers *= step
-    centers_offset *= step
+    centers_offsets *= step
 
     centers = centers.view(-1, 2)
-    centers_offset = centers_offset.view(-1, 2)
+    centers_offsets = centers_offsets.view(-1, 2)
     plt.figure(i)
     plt.imshow(img)
-    # plt.scatter(centers[:, 1], centers[:, 0], s=10, c='g', alpha=1)
-    plt.scatter(centers_offset[:, 1], centers_offset[:, 0], s=10, c='r', alpha=1)
+    # plt.scatter(centers[:, 1], centers[:, 0], s=30, c='skyblue', alpha=1)
+    # plt.scatter(centers_offsets[:, 1], centers_offsets[:, 0], s=30, c='r', alpha=1)
+    plt.axis('off')
     plt.show()
 
 if __name__ == '__main__':
 
     feature_type = 'ga_retina_dml3'
     # root_path = 'mytest/'
-    root_path = 'mytest/ga_retina_dml3_fpn_1shot/'
+    root_path = 'mytest/ga_retina_dml3_base_epoch_16_1shot/'
 
     file_name_base = file_outs_dict[feature_type]
     file_name_base = root_path + file_name_base
@@ -149,5 +158,5 @@ if __name__ == '__main__':
         # offsets_cls = outs['offsets_reg']
         # group_num = offsets_cls[0].size(1) // 9 // 2
 
-        offsets_reg = outs['offsets_reg']
-        show_offset_center(offsets_reg, step, level)
+        # offsets_reg = outs['offsets_reg']
+        # show_offset_center(offsets_reg, step, level)

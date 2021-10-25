@@ -342,10 +342,10 @@ if __name__ == '__main__':
     # file_name = 'mytest/fpn_outs_crop.pth'
     # outs_names = ['laterals', 'fpn_outs']
 
-    feature_type = 'ga_retina_dml3'
-    # feature_type = 'FPN'
+    # feature_type = 'ga_retina_dml3'
+    feature_type = 'FPN'
     # feature_type = 'DFPN4'
-    root_path = 'mytest/'
+    root_path = 'mytest/ga_retina_dml3_base_epoch_16_1shot/'
     # root_path = 'mytest/ga_retina_dml3_dfpn2_1shot/'
     # root_path = 'mytest/ga_retina_dml2D_fpn_1shot/'
     # root_path = 'mytest/ga_retina_dml3_fpn_1shot/'
@@ -360,10 +360,10 @@ if __name__ == '__main__':
         # show_feature_pyramids_L2(outs, outs_names)
         # plot_feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'])
         # show_cls_feat_enhances(outs)
-        show_emb_vectors_TSNE(outs)
+        # show_emb_vectors_TSNE(outs)
         # show_offsets(outs)
         # show_reg_feat_enhances(outs)
-        # show_feature_pyramids(outs, outs_names)
+        show_feature_pyramids(outs, outs_names)
         # show_emb_vectors(outs)
         # feature_pyramids_similarity_list.append(feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'], norm=False))
     #     feature_pyramids_similarity_list.append(feature_pyramids_similarity(outs['cls_feat'], outs['reg_feat']))

@@ -195,4 +195,11 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
                 bboxes,
                 labels,
                 class_names=class_names,
-                score_thr=score_thr)
+                score_thr=score_thr,
+                # bbox_color=(72, 101, 241),
+                # text_color=(72, 101, 241),
+                bbox_color=(255, 30, 20),
+                text_color=(255, 30, 20),
+                thickness=2,
+                font_thickness=2,
+                font_scale=1)

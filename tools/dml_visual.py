@@ -178,7 +178,7 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     cls_scores = cls_scores[0]
     cls_scores = cls_scores.permute(1, 2, 0).contiguous()
     cls_scores = cls_scores.view(-1, cls_scores.size(-1))
-    cls_scores = cls_scores.softmax(-1)
+    # cls_scores = cls_scores.softmax(-1)
     cls_pre_score, cls_pre_idx = cls_scores.max(dim=-1, keepdim=True)
     num_cls = len(CLASSES_VOC)
 
@@ -193,7 +193,8 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     # plt.plot(X_norm[:-num_cls, 0], X_norm[:-num_cls, 1], 'r.')
     for i in range(X_norm.shape[0] - num_cls):
         cls_pre_name = '' if cls_pre_idx[i] == 0 else CLASSES_VOC[cls_pre_idx[i] - 1]
-        plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name, color='k',
+        cls_pre_score_text = '' if cls_pre_idx[i] == 0 else str(float(cls_pre_score[i]))
+        plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name+cls_pre_score_text, color='k',
                  fontdict={'weight': 'bold', 'size': 20})
     plt.plot(X_norm[-num_cls:, 0], X_norm[-num_cls:, 1], 'g.')
     for i in range(num_cls):
@@ -228,7 +229,9 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
             plt.xlabel('Close-up inside the red rectangle', fontdict={'size': 20})
 
 def show_emb_vectors_TSNE_multi_epoch(outs_list, scale_idx=-1, img=None, x_label_list=None, extra=None):
-    emb_vectors_tuple = outs_list[0]['emb_vectors']
+    emb_vectors_tuple = outs_list[0]['cls_feat']
+    # emb_vectors_tuple = outs_list[0]['emb_vectors']
+    # emb_vectors_tuple = outs_list[0]['cls_feat_enhance']
     f_w = emb_vectors_tuple[scale_idx].size(3)
     f_h = emb_vectors_tuple[scale_idx].size(2)
 

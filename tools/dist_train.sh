@@ -5,11 +5,11 @@ CONFIG=$1
 GPUS=$2
 PORT=${PORT:-87500}
 OMP_NUM_THREADS=1 \
-CUDA_VISIBLE_DEVICES=7 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
     $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
     --validate \
-    --work_dir 'work_dirs/retina_dml2_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_aug_standard1_10shot_r10_lr0001x2x1_warm1000_12_16_18_ind1_1_1'
-#    --work_dir 'work_dirs/retina_dml2_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x1_10_14_16_ind1_1'
+    --work_dir 'work_dirs/ga_retina_dmlneg3_s2_fpn_emb256_128_m1_negm3_alpha015_nratio3_voc_base2_r1_lr00025x2x8_10_14_16_ind1_1'
+#    --work_dir 'work_dirs/retina_dml2_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_aug_standard1_10shot_r10_lr0001x2x1_warm1000_12_16_18_ind1_1_1'
 #    --work_dir 'work_dirs/ga_retina_dml7_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_14_18_20_ind4_1'
 #    --work_dir 'work_dirs/retina_drt_s2_fpn_voc_aug_standard1_3shot_r20_lr00025x2x1_warm1000_12_16_18_ind1_1_1'
 #    --work_dir 'work_dirs/plot_ga_retina_dml3_fpn_epoch_0'
