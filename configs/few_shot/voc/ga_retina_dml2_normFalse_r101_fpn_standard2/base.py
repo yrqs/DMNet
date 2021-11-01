@@ -8,7 +8,6 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-neg_alpha = 0.1
 
 model = dict(
     type='RetinaNet',
@@ -30,12 +29,14 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLNegHead3',
+        type='GARetinaDMLHead2',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        neg_sample_thresh=0.05,
-        cls_emb_head_cfg=dict(emb_channels=(256, 128), num_modes=1, sigma=0.5, cls_norm=True, beta=0.3, neg_num_modes=3),
+        emb_sizes=emb_sizes,
+        num_modes=1,
+        sigma=0.5,
+        cls_norm=False,
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -63,9 +64,7 @@ model = dict(
             loss_weight=1.0),
         # loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.7),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
-        loss_emb_neg=dict(type='RepMetLoss', alpha=neg_alpha, loss_weight=1.0),
-    ))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -182,7 +181,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[18, 22])
+    step=[10, 14])
 checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
@@ -193,7 +192,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 24
+total_epochs = 16
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'

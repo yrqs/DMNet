@@ -13,9 +13,13 @@ from mmdet.core import (AnchorGenerator, anchor_inside_flags, anchor_target,
 
 from ..builder import build_loss
 from ..losses import FocalLoss
-
-import random
 import os
+
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1/x2)
 
 class FeatureAdaptionCls(nn.Module):
     """Feature Adaption Module.
@@ -54,10 +58,13 @@ class FeatureAdaptionCls(nn.Module):
         normal_init(self.conv_offset, std=0.1)
         normal_init(self.conv_adaption, std=0.01)
 
-    def forward(self, x, shape):
+    def forward(self, x, shape, save_out=False):
         offset = self.conv_offset(shape)
         x = self.relu(self.conv_adaption(x, offset))
-        return x
+        if save_out:
+            return x, offset
+        else:
+            return x
 
 @HEADS.register_module
 class GARetinaDMLHead2(GuidedAnchorHead):
@@ -71,10 +78,9 @@ class GARetinaDMLHead2(GuidedAnchorHead):
                  emb_sizes=(2048, 1024),
                  num_modes=5,
                  sigma=0.5,
+                 cls_norm=True,
                  freeze=False,
-                 freeze_ratio=1.0,
                  save_outs=False,
-                 deformable_groups_cls=4,
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
                  **kwargs):
         self.stacked_convs = stacked_convs
@@ -83,14 +89,18 @@ class GARetinaDMLHead2(GuidedAnchorHead):
         self.emb_sizes = emb_sizes
         self.num_modes = num_modes
         self.sigma = sigma
-        self.deformable_groups_cls = deformable_groups_cls
+        self.cls_norm = cls_norm
         super(GARetinaDMLHead2, self).__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs
 
         if freeze:
-            for c in [self.emb, self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape, self.cls_feat_enhance,
-                      self.feature_adaption_cls, self.feature_adaption_reg, ]:
+            # for c in [self.emb]:
+            #     for p in c.parameters():
+            #         p.requires_grad = False
+
+            for c in [self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape,
+                      self.feature_adaption_cls, self.feature_adaption_reg]:
                 for p in c.parameters():
                     p.requires_grad = False
 
@@ -142,15 +152,15 @@ class GARetinaDMLHead2(GuidedAnchorHead):
         self.conv_loc = nn.Conv2d(self.feat_channels, 1, 1)
         self.conv_shape = nn.Conv2d(self.feat_channels, self.num_anchors * 2, 1)
 
-        self.cls_feat_enhance = nn.Conv2d(self.feat_channels, self.deformable_groups_cls, 3, stride=1, padding=1)
+        self.cls_feat_enhance = nn.Conv2d(self.feat_channels, self.deformable_groups, 3, stride=1, padding=1)
 
         self.feature_adaption_cls = FeatureAdaptionCls(
             self.feat_channels,
             self.feat_channels,
             kernel_size=3,
-            conv_offset_in_channels=self.deformable_groups_cls+1,
+            conv_offset_in_channels=self.deformable_groups,
             conv_offset_kernel_size=3,
-            deformable_groups=self.deformable_groups_cls)
+            deformable_groups=self.deformable_groups)
 
         self.feature_adaption_reg = FeatureAdaption(
             self.feat_channels,
@@ -199,14 +209,17 @@ class GARetinaDMLHead2(GuidedAnchorHead):
         shape_pred = self.conv_shape(reg_feat)
 
         cls_feat_enhance_pre = self.cls_feat_enhance(cls_feat)
-        cls_feat_enhance_pre = torch.cat([cls_feat_enhance_pre, loc_pred.detach()], dim=1)
+        # cls_feat_enhance_pre = torch.cat([cls_feat_enhance_pre, loc_pred.detach()], dim=1)
 
-        feat_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre)
-        feat_reg = self.feature_adaption_reg(reg_feat, shape_pred)
+        if self.save_outs:
+            feat_cls, offset_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
+            feat_reg, offset_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
+        else:
+            feat_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
+            feat_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
 
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
-            # mask = loc_pred.sigmoid()[0] >= 0.1
         else:
             mask = None
 
@@ -232,25 +245,31 @@ class GARetinaDMLHead2(GuidedAnchorHead):
         distances = torch.sqrt(((distances - reps)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
 
         probs_cls = torch.exp(-distances**2/(2.0*self.sigma**2))
-        # print(probs_cls.size())
-        probs_cls_sumj = probs_cls.sum(2)
-        probs_cls_sumij = probs_cls_sumj.sum(1, keepdim=True)
-        probs_fg = probs_cls_sumj / probs_cls_sumij
+        # probs_fg = probs_cls.max(dim=2)[0]
+        if self.cls_norm:
+            probs_cls_sumj = probs_cls.sum(2)
+            probs_cls_sumij = probs_cls_sumj.sum(1, keepdim=True)
+            probs_fg = probs_cls_sumj / probs_cls_sumij
+        else:
+            probs_fg = probs_cls.max(dim=2)[0]
 
         if not (mask is None):
             probs_fg = probs_fg * mask.unsqueeze(0).float()
 
-        probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
+        # probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
 
-        cls_score = torch.cat((probs_bg, probs_fg), 1)
+        # cls_score = torch.cat((probs_bg, probs_fg), 1)
+
+        cls_score = inverse_sigmoid(probs_fg)
 
         if self.training:
             return cls_score, bbox_pred, shape_pred, loc_pred, distances
         else:
             if self.save_outs:
-                return cls_score.log(), bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre
+                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, reps, offset_cls, offset_reg
             else:
-                return cls_score.log(), bbox_pred, shape_pred, loc_pred
+                # return cls_score.log(), bbox_pred, shape_pred, loc_pred
+                return cls_score, bbox_pred, shape_pred, loc_pred
 
 
     def forward(self, feats):
@@ -258,17 +277,21 @@ class GARetinaDMLHead2(GuidedAnchorHead):
             return multi_apply(self.forward_single, feats)
         else:
             if self.save_outs:
-                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres = multi_apply(self.forward_single, feats)
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, reps, offsets_cls, offsets_reg = multi_apply(self.forward_single, feats)
                 res = dict()
+                res['cls_scores'] = cls_scores
                 res['cls_feat'] = cls_feat
                 res['reg_feat'] = reg_feat
                 res['cls_feat_adp'] = cls_feat_adp
                 res['reg_feat_adp'] = reg_feat_adp
-                res['cls_loc'] = tuple([cls_feat_enhance_pre[:, -1].unsqueeze(1) for cls_feat_enhance_pre in cls_feat_enhance_pres])
-                res['cls_feat_enhance'] = tuple([cls_feat_enhance_pre[:, :-1] for cls_feat_enhance_pre in cls_feat_enhance_pres])
+                res['cls_loc'] = loc_preds
+                res['cls_feat_enhance'] = cls_feat_enhance_pres
                 res['emb_vectors'] = emb_vectors
+                res['reps'] = reps
+                res['offsets_cls'] = offsets_cls
+                res['offsets_reg'] = offsets_reg
                 save_idx = 1
-                save_path_base = 'mytest/ga_retina_dml2_feature.pth'
+                save_path_base = 'mytest/ga_retina_dml3_feature.pth'
                 save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
                 while os.path.exists(save_path):
                     save_idx += 1
@@ -405,43 +428,43 @@ class GARetinaDMLHead2(GuidedAnchorHead):
             loss_loc=losses_loc,
             loss_emb=losses_emb)
 
-    def loss_single(self, cls_score, bbox_pred, labels, label_weights,
-                    bbox_targets, bbox_weights, num_total_samples, cfg):
-        labels = labels.reshape(-1)
-        label_weights = label_weights.reshape(-1)
-        cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-
-        loss_cls_all = F.nll_loss(cls_score.log(), labels, None, None, -100, None, 'none') * label_weights
-        # print(loss_cls_all.size())
-        pos_inds = (labels > 0).nonzero().view(-1)
-        neg_inds = (labels == 0).nonzero().view(-1)
-
-        num_pos_samples = pos_inds.size(0)
-        num_neg_samples = cfg.neg_pos_ratio * num_pos_samples
-        if num_neg_samples > neg_inds.size(0):
-            num_neg_samples = neg_inds.size(0)
-        topk_loss_cls_neg, _ = loss_cls_all[neg_inds].topk(num_neg_samples)
-        loss_cls_pos = loss_cls_all[pos_inds].sum()
-        loss_cls_neg = topk_loss_cls_neg.sum()
-        loss_cls = (loss_cls_pos + loss_cls_neg) / num_total_samples
-        # print(num_total_samples)
-        # loss_cls = self.loss_cls(
-        #     cls_score,
-        #     labels,
-        #     label_weights,
-        #     avg_factor=num_total_samples
-        # )
-
-        bbox_targets = bbox_targets.reshape(-1, 4)
-        bbox_weights = bbox_weights.reshape(-1, 4)
-        bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
-
-        loss_bbox = self.loss_bbox(
-            bbox_pred,
-            bbox_targets,
-            bbox_weights,
-            avg_factor=num_total_samples)
-        return loss_cls, loss_bbox
+    # def loss_single(self, cls_score, bbox_pred, labels, label_weights,
+    #                 bbox_targets, bbox_weights, num_total_samples, cfg):
+    #     labels = labels.reshape(-1)
+    #     label_weights = label_weights.reshape(-1)
+    #     cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
+    #
+    #     loss_cls_all = F.nll_loss(cls_score.log(), labels, None, None, -100, None, 'none') * label_weights
+    #     # print(loss_cls_all.size())
+    #     pos_inds = (labels > 0).nonzero().view(-1)
+    #     neg_inds = (labels == 0).nonzero().view(-1)
+    #
+    #     num_pos_samples = pos_inds.size(0)
+    #     num_neg_samples = cfg.neg_pos_ratio * num_pos_samples
+    #     if num_neg_samples > neg_inds.size(0):
+    #         num_neg_samples = neg_inds.size(0)
+    #     topk_loss_cls_neg, _ = loss_cls_all[neg_inds].topk(num_neg_samples)
+    #     loss_cls_pos = loss_cls_all[pos_inds].sum()
+    #     loss_cls_neg = topk_loss_cls_neg.sum()
+    #     loss_cls = (loss_cls_pos + loss_cls_neg) / num_total_samples
+    #     # print(num_total_samples)
+    #     # loss_cls = self.loss_cls(
+    #     #     cls_score,
+    #     #     labels,
+    #     #     label_weights,
+    #     #     avg_factor=num_total_samples
+    #     # )
+    #
+    #     bbox_targets = bbox_targets.reshape(-1, 4)
+    #     bbox_weights = bbox_weights.reshape(-1, 4)
+    #     bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
+    #
+    #     loss_bbox = self.loss_bbox(
+    #         bbox_pred,
+    #         bbox_targets,
+    #         bbox_weights,
+    #         avg_factor=num_total_samples)
+    #     return loss_cls, loss_bbox
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):
         # filter out negative samples
@@ -503,8 +526,8 @@ class GARetinaDMLHead2(GuidedAnchorHead):
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
-                scores = cls_score.softmax(-1)
-                # scores = cls_score
+                # scores = cls_score.softmax(-1)
+                scores = cls_score
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
             # filter scores, bbox_pred w.r.t. mask.
             # anchors are filtered in get_anchors() beforehand.

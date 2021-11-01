@@ -15,6 +15,12 @@ from ..builder import build_loss
 from ..losses import FocalLoss
 import os
 
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1/x2)
+
 class DMLNegHead(nn.Module):
     def __init__(self,
                  emb_module,
@@ -42,7 +48,7 @@ class DMLNegHead(nn.Module):
         self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
 
         normal_init(self.rep_fc, std=0.01)
-        normal_init(self.neg_offset_fc, std=0.01)
+        constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
@@ -79,25 +85,26 @@ class DMLNegHead(nn.Module):
         probs_neg = torch.exp(-distances_neg**2/(2.0*self.sigma**2))
         cls_score_neg = probs_neg.max(dim=2)[0]
 
-        probs = torch.exp(-(distances+self.beta*(2-distances_neg))**2/(2.0*self.sigma**2))
+        probs_ori = torch.exp(-(distances)**2/(2.0*self.sigma**2))
+        probs = torch.exp(-(distances+self.beta*(2-distances_neg.min(dim=2, keepdim=True)[0]))**2/(2.0*self.sigma**2))
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
-            probs_fg = probs_sumj / probs_sumij
+            cls_score = probs_sumj / probs_sumij
         else:
-            probs_fg = probs.max(dim=2)[0]
+            cls_score = probs.max(dim=2)[0]
 
-        probs_bg = torch.sub(1, probs.max(1)[0].max(1, keepdim=True)[0])
+        # probs_bg = torch.sub(1, probs.max(1)[0].max(1, keepdim=True)[0])
         # if self.training:
         #     probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
         # else:
         #     probs_bg = torch.zeros(probs_fg.shape[0], 1, probs_fg.shape[2], probs_fg.shape[3]).to(probs_fg.device)
 
-        cls_score = torch.cat((probs_bg, probs_fg), 1)
+        # cls_score = torch.cat((probs_bg, probs_fg), 1)
 
         if save_outs:
-            return cls_score, cls_score_neg, distances, distances_neg, emb_vectors, reps, reps_neg
-        return cls_score, cls_score_neg, distances, distances_neg
+            return cls_score, cls_score_neg, distances, distances_neg, probs_ori, emb_vectors, reps, reps_neg
+        return cls_score, cls_score_neg, distances, distances_neg, probs_ori
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
     emb_list = []
@@ -305,10 +312,10 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(feat_reg, mask)
 
-        cls_score, cls_score_neg, distance, distance_neg = self.cls_head(feat_cls)
+        cls_score, cls_score_neg, distance, distance_neg, probs_ori = self.cls_head(feat_cls)
 
         if self.training:
-            return cls_score, bbox_pred, shape_pred, loc_pred, distance, cls_score_neg, distance_neg
+            return cls_score, bbox_pred, shape_pred, loc_pred, distance, cls_score_neg, distance_neg, probs_ori
         else:
             if self.save_outs:
                 return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg, distances, probs_cls, cls_score
@@ -347,7 +354,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
             return cls_scores, bbox_preds, shape_preds_reg, loc_preds
 
     @force_fp32(
-        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'extras', 'cls_scores_neg', 'distances_neg'))
+        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'extras', 'cls_scores_neg', 'distances_neg', 'probs_ori'))
     def loss(self,
              cls_scores,
              bbox_preds,
@@ -356,6 +363,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
              extras,
              cls_scores_neg,
              distances_neg,
+             probs_ori,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -470,26 +478,36 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
 
         num_total_samples_neg = 0
         neg_labels_list = []
-        inds_mask_list = []
+        neg_labels_one_hot_list = []
         for cls_score, labels in zip(cls_scores, labels_list):
-            neg_labels, num_samples_neg, inds_mask = self.get_neg_labels_single(cls_score, labels)
+            neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(probs_ori, labels)
+            # neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(cls_score, labels)
             neg_labels_list.append(neg_labels)
-            inds_mask_list.append(inds_mask)
+            neg_labels_one_hot_list.append(neg_labels_one_hot)
             num_total_samples_neg += num_samples_neg
             # print('num_samples_neg: ', num_samples_neg)
-        # num_total_samples_neg = max(1, num_total_samples_neg)
+        num_total_samples_neg = max(1, num_total_samples_neg)
+
+        labels_one_hot_list = []
+        for i, labels in enumerate(labels_list):
+            labels_flatten = labels.reshape(-1, 1)
+            labels_one_hot = labels_flatten.new_full((labels_flatten.shape[0], self.cls_out_channels + 1), 0,
+                                                     dtype=torch.long)
+            labels_one_hot = labels_one_hot.scatter(1, labels_flatten, 1)[:, 1:]
+            labels_one_hot_list.append(labels_one_hot)
 
         losses_emb_neg = []
         losses_emb_pos = []
         num_total_samples_emb_neg = sum([int((_ > 0).sum()) for _ in neg_labels_list])
         for i in range(len(cls_scores)):
-            loss_emb_neg, loss_emb_pos = self.loss_emb_neg_single(
+            loss_emb_pos, loss_emb_neg = self.loss_emb_neg_single(
                 distances[i],
                 distances_neg[i],
                 labels_list[i],
                 neg_labels_list[i],
                 label_weights_list[i],
-                inds_mask_list[i],
+                labels_one_hot_list[i],
+                neg_labels_one_hot_list[i],
                 num_total_samples_pos=num_total_samples_emb,
                 num_total_samples_neg=num_total_samples_emb_neg)
             # print('loss_emb_neg: ', loss_emb_neg)
@@ -515,83 +533,64 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
             cls_score, labels, label_weights, avg_factor=num_total_samples)
         return loss_cls
 
-    def loss_emb_neg_single(self, distance, distance_neg, labels, labels_neg, label_weights, inds_mask, num_total_samples_pos, num_total_samples_neg):
+    def loss_emb_neg_single(self, distance, distance_neg, labels, labels_neg, label_weights, labels_ont_hot,
+                            neg_labels_one_hot, num_total_samples_pos, num_total_samples_neg):
         distance = distance.flatten(3).permute(0, 3, 1, 2).flatten(0, 1)
-        distance = distance[inds_mask].unsqueeze(1)
         distance_neg = distance_neg.flatten(3).permute(0, 3, 1, 2).min(dim=-1, keepdim=True)[0].flatten(0, 1)
-        distance_neg = distance_neg[inds_mask].unsqueeze(1)
-        distance_cat = torch.cat([distance, distance_neg], dim=1)
 
-        labels_neg = labels_neg.reshape(-1)
-        pos_inds = labels_neg > 0
-        distance_cat_pos = distance_cat[pos_inds]
-        label_weights_pos = label_weights.reshape(-1)[pos_inds]
-        labels_neg_pos = labels_neg[pos_inds].view(-1, 1)
-        labels_neg_pos[:, :] = 2
-        loss_emb_neg = self.loss_emb_neg(
-            distance_cat_pos,
-            labels_neg_pos,
-            label_weights_pos,
-            avg_factor=max(1, num_total_samples_neg))
+        distance_cat = torch.cat([distance, distance_neg], dim=-1)
 
+        distance_cat_pos = distance_cat[labels_ont_hot==1].unsqueeze(-1)
         labels = labels.reshape(-1)
-        pos_inds = labels_neg > 0
-        distance_cat_pos = distance_cat[pos_inds]
+        pos_inds = labels > 0
         label_weights_pos = label_weights.reshape(-1)[pos_inds]
-        labels_pos = labels[pos_inds].view(-1, 1)
-        labels_pos[:, :] = 1
+        labels_pos = distance_cat_pos.new_full((distance_cat_pos.shape[0], 1), 1, dtype=torch.long)
         loss_emb_pos = self.loss_emb_neg(
             distance_cat_pos,
             labels_pos,
             label_weights_pos,
             avg_factor=max(1, num_total_samples_pos))
+
+        distance_cat_neg = distance_cat[neg_labels_one_hot==1].unsqueeze(-1)
+        labels_neg = labels_neg.reshape(-1)
+        neg_inds = labels_neg > 0
+        label_weights_neg = label_weights.reshape(-1)[neg_inds]
+        labels_neg = distance_cat_neg.new_full((distance_cat_neg.shape[0], 1), 2, dtype=torch.long)
+        loss_emb_neg = self.loss_emb_neg(
+            distance_cat_neg,
+            labels_neg,
+            label_weights_neg,
+            avg_factor=max(1, num_total_samples_neg))
         return loss_emb_pos, loss_emb_neg
 
     def get_neg_labels_single(self, cls_score, labels):
-        cls_score = cls_score[:, 1:, :, :].flatten(2).permute(0, 2, 1)
+        cls_score = cls_score.flatten(2).permute(0, 2, 1)
         # print('cls_score.max: ', cls_score.max())
         # print('cls_score.min: ', cls_score.min())
         pred_cls_score, pred_cls_id = cls_score.max(dim=-1)
-        neg_labels = pred_cls_id.clone()
+        neg_labels = pred_cls_id.clone() + 1
         neg_labels[neg_labels==labels] = 0
         neg_labels[pred_cls_score<self.neg_sample_thresh] = 0
         num_samples = int((neg_labels > 0).sum())
-        pred_cls_id = pred_cls_id.reshape(-1, 1)
-        inds_mask = pred_cls_id.new_full((pred_cls_id.shape[0], cls_score.shape[-1]), 0)
-        inds_mask = inds_mask.scatter(1, pred_cls_id, 1)
-        return neg_labels, num_samples, inds_mask
+        neg_labels = neg_labels.reshape(-1, 1)
+        neg_labels_one_hot = neg_labels.new_full((neg_labels.shape[0], cls_score.shape[-1]+1), 0, dtype=torch.long)
+        neg_labels_one_hot = neg_labels_one_hot.scatter(1, neg_labels, 1)[:,  1:]
+        return neg_labels, num_samples, neg_labels_one_hot
 
     def loss_single(self, cls_score, bbox_pred, labels, label_weights,
                     bbox_targets, bbox_weights, num_total_samples, cfg):
+        # classification loss
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
-        cls_score = cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
-
-        loss_cls_all = F.nll_loss(cls_score.log(), labels, None, None, -100, None, 'none') * label_weights
-        # print(loss_cls_all.size())
-        pos_inds = (labels > 0).nonzero().view(-1)
-        neg_inds = (labels == 0).nonzero().view(-1)
-
-        num_pos_samples = pos_inds.size(0)
-        num_neg_samples = cfg.neg_pos_ratio * num_pos_samples
-        if num_neg_samples > neg_inds.size(0):
-            num_neg_samples = neg_inds.size(0)
-        topk_loss_cls_neg, _ = loss_cls_all[neg_inds].topk(num_neg_samples)
-        loss_cls_pos = loss_cls_all[pos_inds].sum()
-        loss_cls_neg = topk_loss_cls_neg.sum()
-        loss_cls = (loss_cls_pos + loss_cls_neg) / num_total_samples
-        # print(num_total_samples)
-        # loss_cls = self.loss_cls(
-        #     cls_score,
-        #     labels,
-        #     label_weights,
-        #     avg_factor=num_total_samples
-        # )
-
+        cls_score = inverse_sigmoid(cls_score)
+        cls_score = cls_score.permute(0, 2, 3,
+                                      1).reshape(-1, self.cls_out_channels)
+        loss_cls = self.loss_cls(
+            cls_score, labels, label_weights, avg_factor=num_total_samples)
+        # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
         bbox_weights = bbox_weights.reshape(-1, 4)
         bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
-
         loss_bbox = self.loss_bbox(
             bbox_pred,
             bbox_targets,
@@ -657,7 +656,8 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
             cls_score = cls_score.permute(1, 2,
                                           0).reshape(-1, self.cls_out_channels)
             if self.use_sigmoid_cls:
-                scores = cls_score.sigmoid()
+                scores = cls_score
+                # scores = cls_score.sigmoid()
             else:
                 # scores = cls_score.softmax(-1)
                 scores = cls_score
