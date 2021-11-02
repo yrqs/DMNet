@@ -13,14 +13,14 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-neg_alpha = 0.1
+neg_alpha = 0.2
 
-warmup_iters = 1000
+warmup_iters = 500
 lr_step = [12, 16, 18]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 1
+gpu_num = 2
 
 model = dict(
     type='RetinaNet',
@@ -46,12 +46,12 @@ model = dict(
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        neg_sample_thresh=0.2,
+        neg_sample_thresh=0.1,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=True,
+            cls_norm=False,
             neg_scope=2.0,
             beta=0.3,
             neg_num_modes=3),
@@ -212,6 +212,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg3_s2_fpn_emb256_128_m1_negm3_alpha015_nratio3_voc_base2_r1_lr00025x2x8_18_22_24_ind1_1/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha02_nthre01_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]
