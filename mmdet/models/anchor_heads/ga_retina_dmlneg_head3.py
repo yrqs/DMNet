@@ -28,6 +28,7 @@ class DMLNegHead(nn.Module):
                  emb_channels,
                  num_modes, sigma,
                  cls_norm,
+                 neg_scope=2.0,
                  beta=0.3,
                  neg_num_modes=3,
                  freeze=False):
@@ -42,13 +43,15 @@ class DMLNegHead(nn.Module):
         self.cls_norm = cls_norm
         self.beta = beta
         self.neg_num_modes = neg_num_modes
+        self.neg_scope = neg_scope
         self.representations = nn.Parameter(
             torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
         self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
 
         normal_init(self.rep_fc, std=0.01)
-        constant_init(self.neg_offset_fc, 0)
+        normal_init(self.neg_offset_fc, std=0.01)
+        # constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
@@ -86,7 +89,8 @@ class DMLNegHead(nn.Module):
         cls_score_neg = probs_neg.max(dim=2)[0]
 
         probs_ori = torch.exp(-(distances)**2/(2.0*self.sigma**2))
-        probs = torch.exp(-(distances+self.beta*(2-distances_neg.min(dim=2, keepdim=True)[0]))**2/(2.0*self.sigma**2))
+        probs_ori = probs_ori.max(dim=2)[0]
+        probs = torch.exp(-(distances+self.beta*(F.relu(self.neg_scope-distances_neg.min(dim=2, keepdim=True)[0])))**2/(2.0*self.sigma**2))
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
@@ -479,8 +483,8 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
         num_total_samples_neg = 0
         neg_labels_list = []
         neg_labels_one_hot_list = []
-        for cls_score, labels in zip(cls_scores, labels_list):
-            neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(probs_ori, labels)
+        for prob_ori, labels in zip(probs_ori, labels_list):
+            neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(prob_ori, labels)
             # neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(cls_score, labels)
             neg_labels_list.append(neg_labels)
             neg_labels_one_hot_list.append(neg_labels_one_hot)

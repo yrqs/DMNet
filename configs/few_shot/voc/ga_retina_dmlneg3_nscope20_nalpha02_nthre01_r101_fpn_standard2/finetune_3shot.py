@@ -1,7 +1,7 @@
 # model settings
 
 save_outs = False
-shot = 1
+shot = 3
 shot_idx = [1, 2, 3, 5, 10].index(shot)
 train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
@@ -13,6 +13,7 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
+neg_alpha = 0.1
 
 warmup_iters = 1000
 lr_step = [12, 16, 18]
@@ -45,8 +46,15 @@ model = dict(
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        neg_sample_thresh=0.05,
-        cls_emb_head_cfg=dict(emb_channels=(256, 128), num_modes=1, sigma=0.5, cls_norm=True, beta=0.3, neg_num_modes=3),
+        neg_sample_thresh=0.2,
+        cls_emb_head_cfg=dict(
+            emb_channels=(256, 128),
+            num_modes=1,
+            sigma=0.5,
+            cls_norm=True,
+            neg_scope=2.0,
+            beta=0.3,
+            neg_num_modes=3),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -68,14 +76,14 @@ model = dict(
         loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
         loss_cls=dict(
             type='FocalLoss',
-            use_sigmoid=False,
+            use_sigmoid=True,
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0),
         # loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.7),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
-        loss_emb_neg=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+        loss_emb_neg=dict(type='RepMetLoss', alpha=neg_alpha, loss_weight=1.0),
     ))
 # training and testing settings
 train_cfg = dict(
