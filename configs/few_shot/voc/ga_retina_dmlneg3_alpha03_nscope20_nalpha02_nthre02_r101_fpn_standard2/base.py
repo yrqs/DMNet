@@ -7,8 +7,8 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (128, 256)][1]
 stacked_convs = 2
 
-alpha = 0.15
-neg_alpha = 0.1
+alpha = 0.30
+neg_alpha = 0.2
 
 model = dict(
     type='RetinaNet',
@@ -39,7 +39,7 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=True,
+            cls_norm=False,
             neg_scope=2.0,
             beta=0.3,
             neg_num_modes=3),
@@ -181,7 +181,7 @@ data = dict(
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*6, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*2*2, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(

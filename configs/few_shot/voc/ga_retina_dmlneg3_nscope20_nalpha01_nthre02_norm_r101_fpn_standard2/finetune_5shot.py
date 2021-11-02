@@ -212,6 +212,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_norm_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]
