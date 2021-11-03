@@ -40,6 +40,7 @@ class DMLNegHead(nn.Module):
         self.emb_module = emb_module
         self.emb_channels = emb_channels
         self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
+        self.neg_rep_fc = nn.Linear(1, output_channels * neg_num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.beta = beta
         self.neg_num_modes = neg_num_modes
@@ -47,16 +48,19 @@ class DMLNegHead(nn.Module):
         self.representations = nn.Parameter(
             torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
-        self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
+        self.neg_representations = nn.Parameter(
+            torch.FloatTensor(self.output_channels, self.neg_num_modes, self.emb_channels[-1]),
+            requires_grad=False)
+        # self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
 
         normal_init(self.rep_fc, std=0.01)
-        normal_init(self.neg_offset_fc, std=0.01)
+        normal_init(self.neg_rep_fc, std=0.01)
         # constant_init(self.neg_offset_fc, 0)
 
-        if freeze:
-            for c in [self.neg_offset_fc]:
-                for p in c.parameters():
-                    p.requires_grad = False
+        # if freeze:
+        #     for c in [self.neg_offset_fc]:
+        #         for p in c.parameters():
+        #             p.requires_grad = False
 
     def forward(self, x, save_outs=False):
         emb_vectors = self.emb_module(x)
@@ -70,9 +74,17 @@ class DMLNegHead(nn.Module):
         else:
             reps = self.representations.detach()
 
-        neg_offset = self.neg_offset_fc(reps.squeeze(1)).view(reps.size(0), self.neg_num_modes, reps.size(-1))
-        reps_neg = neg_offset + reps.expand_as(neg_offset)
-        reps_neg = F.normalize(reps_neg, p=2, dim=2)
+        if self.training:
+            reps_neg = self.neg_rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
+            reps_neg  = reps_neg.view(self.output_channels, self.neg_num_modes, self.emb_channels[-1])
+            reps_neg = F.normalize(reps_neg, p=2, dim=2)
+            self.neg_representations.data = reps_neg.detach()
+        else:
+            reps_neg = self.neg_representations.detach()
+
+        # neg_offset = self.neg_offset_fc(reps.squeeze(1)).view(reps.size(0), self.neg_num_modes, reps.size(-1))
+        # reps_neg = neg_offset + reps.expand_as(neg_offset)
+        # reps_neg = F.normalize(reps_neg, p=2, dim=2)
 
         distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
         distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
@@ -174,7 +186,7 @@ class FeatureAdaptionCls(nn.Module):
             return x
 
 @HEADS.register_module
-class GARetinaDMLNegHead3(GuidedAnchorHead):
+class GARetinaDMLNegHead4(GuidedAnchorHead):
     """Guided-Anchor-based RetinaNet head."""
     def __init__(self,
                  num_classes,

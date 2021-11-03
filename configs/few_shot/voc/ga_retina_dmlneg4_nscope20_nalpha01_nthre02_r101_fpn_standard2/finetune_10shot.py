@@ -1,7 +1,7 @@
 # model settings
 
 save_outs = False
-shot = 3
+shot = 10
 shot_idx = [1, 2, 3, 5, 10].index(shot)
 train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
@@ -42,11 +42,11 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLNegHead3',
+        type='GARetinaDMLNegHead4',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        neg_sample_thresh=0.3,
+        neg_sample_thresh=0.2,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
@@ -212,6 +212,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_nscope20_nalpha01_nthre03_voc_base2/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dmlneg4_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]
