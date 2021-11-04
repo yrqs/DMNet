@@ -8,7 +8,7 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-neg_alpha = 0.2
+neg_alpha = 0.1
 
 model = dict(
     type='RetinaNet',
@@ -42,7 +42,7 @@ model = dict(
             cls_norm=False,
             neg_scope=2.0,
             beta=0.3,
-            neg_num_modes=2),
+            neg_num_modes=3),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -153,14 +153,14 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split2_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split2_base.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split3_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split3_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
@@ -172,7 +172,7 @@ data = dict(
         # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         # ann_file='mytest/test_1img.txt',
         # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
         img_prefix=data_root + 'VOC2007/',
         # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
         # img_prefix='mytest/VOC2007',
@@ -181,7 +181,7 @@ data = dict(
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*4, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*2*2, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
