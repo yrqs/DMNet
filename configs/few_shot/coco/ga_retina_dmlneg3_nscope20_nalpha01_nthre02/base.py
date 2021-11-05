@@ -112,8 +112,8 @@ test_cfg = dict(
     nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
-dataset_type = 'VOCDataset'
-data_root = 'data/VOCdevkit/'
+dataset_type = 'CocoDataset'
+data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -148,40 +148,33 @@ data = dict(
     imgs_per_gpu=2,
     workers_per_gpu=2,
     train=dict(
-        type='RepeatDataset',
-        times=1,
-        dataset=dict(
-            type=dataset_type,
-            ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split3_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split3_base.txt'
-            ],
-            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-            pipeline=train_pipeline)),
+        type=dataset_type,
+        fixed_cls_idx=True,
+        ann_file=[data_root + 'annotations/instances_train2014_base.json',
+                  data_root + 'annotations/instances_valminusminival2014_base.json',
+                  ],
+        img_prefix=[data_root + 'images/trainval2014/', data_root + 'images/trainval2014/',],
+        pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
-        img_prefix=data_root + 'VOC2007/',
+        fixed_cls_idx=True,
+        # ann_file=data_root + 'annotations/instances_minival2014_base.json',
+        ann_file=data_root + 'annotations/instances_minival2014.json',
+        img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # ann_file=[
-        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
-        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
-        # ],
-        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        # ann_file='mytest/test_1img.txt',
-        # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
-        img_prefix=data_root + 'VOC2007/',
-        # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
-        # img_prefix='mytest/VOC2007',
+        fixed_cls_idx=True,
+        # ann_file=data_root + 'annotations/instances_minival2014_base.json',
+        # ann_file=data_root + 'annotations/instances_minival2014.json',
+        # img_prefix=data_root + 'images/trainval2014/',
+        ann_file=data_root + 'annotations/instances_train2014_10shot_novel_standard.json',
+        img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline))
-
-evaluation = dict(interval=2, metric='mAP')
+evaluation = dict(interval=2, metric='bbox')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*4, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*2*2, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
@@ -189,7 +182,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[10, 14])
+    step=[16, 22])
 checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
@@ -200,11 +193,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 16
+total_epochs = 24
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
-# resume_from = 'work_dirs/ga_retina_dml3_s2_fpn_256_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_8.pth'
 resume_from = None
 workflow = [('train', 1)]

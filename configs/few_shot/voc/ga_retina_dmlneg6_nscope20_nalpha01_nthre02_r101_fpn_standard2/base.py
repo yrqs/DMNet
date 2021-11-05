@@ -30,7 +30,7 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLNegHead3',
+        type='GARetinaDMLNegHead6',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
@@ -153,14 +153,14 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split3_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split3_base.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split2_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split2_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
@@ -172,7 +172,7 @@ data = dict(
         # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         # ann_file='mytest/test_1img.txt',
         # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split3_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
         img_prefix=data_root + 'VOC2007/',
         # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
         # img_prefix='mytest/VOC2007',

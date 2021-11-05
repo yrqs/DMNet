@@ -67,6 +67,9 @@ from .ga_retina_dml_head15 import GARetinaDMLHead15
 from .retina_DRT_head import RetinaDRTHead
 from .ga_retina_dmlneg_head3 import GARetinaDMLNegHead3
 from .ga_retina_dmlneg_head4 import GARetinaDMLNegHead4
+from .ga_retina_dmlneg_head5 import GARetinaDMLNegHead5
+from .ga_retina_dmlneg_head6 import GARetinaDMLNegHead6
+from .ga_retina_dmlneg_head7 import GARetinaDMLNegHead7
 
 __all__ = [
     'AnchorHead', 'GuidedAnchorHead', 'FeatureAdaption', 'RPNHead',
@@ -85,5 +88,6 @@ __all__ = [
     'GARetinaDMLHead19', 'GARetinaDMLHead18D', 'GARetinaDMLHead20', 'GARetinaDMLHead20D',
     'GARetinaDMLHead21', 'GARetinaDMLHead22', 'GARetinaDMLHead23', 'GARetinaDMLHead22D',
     'GARetinaDMLHead24', 'GARetinaDMLHead24D', 'GARetinaDMLHead25', 'GARetinaDMLHead15',
-    'RetinaDRTHead', 'GARetinaDMLNegHead3', 'GARetinaDMLNegHead4'
+    'RetinaDRTHead', 'GARetinaDMLNegHead3', 'GARetinaDMLNegHead4', 'GARetinaDMLNegHead5',
+    'GARetinaDMLNegHead6', 'GARetinaDMLNegHead7'
 ]

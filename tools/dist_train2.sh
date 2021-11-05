@@ -6,7 +6,7 @@ CONFIG=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn
 GPUS=4
 PORT=${PORT:-37500}
 OMP_NUM_THREADS=4 \
-CUDA_VISIBLE_DEVICES=4,5,6,7 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+CUDA_VISIBLE_DEVICES=0,1,6,7 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
     $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
     --validate \
     --work_dir 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base3'
