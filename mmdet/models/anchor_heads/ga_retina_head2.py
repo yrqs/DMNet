@@ -1,7 +1,7 @@
 import torch.nn as nn
 from mmcv.cnn import normal_init
 
-from mmdet.ops import ConvModule, MaskedConv2d
+from mmdet.ops import ConvModule, MaskedConv2d, DeformConv
 from ..registry import HEADS
 from ..utils import bias_init_with_prob
 from .guided_anchor_head import FeatureAdaption, GuidedAnchorHead
@@ -12,8 +12,53 @@ from mmdet.core import (AnchorGenerator, anchor_inside_flags, anchor_target,
 import torch
 import os
 
+class FeatureAdaptionCls(nn.Module):
+    """Feature Adaption Module.
+
+    Feature Adaption Module is implemented based on DCN v1.
+    It uses anchor shape prediction rather than feature map to
+    predict offsets of deformable conv layer.
+
+    Args:
+        in_channels (int): Number of channels in the input feature map.
+        out_channels (int): Number of channels in the output feature map.
+        kernel_size (int): Deformable conv kernel size.
+        deformable_groups (int): Deformable conv group size.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size=3,
+                 conv_offset_in_channels=2,
+                 conv_offset_kernel_size=3,
+                 deformable_groups=4):
+        super(FeatureAdaptionCls, self).__init__()
+        offset_channels = kernel_size * kernel_size * 2
+        self.conv_offset = nn.Conv2d(
+            conv_offset_in_channels, deformable_groups * offset_channels, conv_offset_kernel_size, padding=conv_offset_kernel_size//2,  bias=False)
+        self.conv_adaption = DeformConv(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=(kernel_size - 1) // 2,
+            deformable_groups=deformable_groups)
+        self.relu = nn.ReLU(inplace=True)
+
+    def init_weights(self):
+        normal_init(self.conv_offset, std=0.1)
+        normal_init(self.conv_adaption, std=0.01)
+
+    def forward(self, x, shape, save_out=False):
+        offset = self.conv_offset(shape)
+        x = self.relu(self.conv_adaption(x, offset))
+        if save_out:
+            return x, offset
+        else:
+            return x
+
 @HEADS.register_module
-class GARetinaHead(GuidedAnchorHead):
+class GARetinaHead2(GuidedAnchorHead):
     """Guided-Anchor-based RetinaNet head."""
 
     def __init__(self,
@@ -30,7 +75,7 @@ class GARetinaHead(GuidedAnchorHead):
         self.norm_cfg = norm_cfg
         self.save_outs = save_outs
         # print('conv_cfg: ', conv_cfg)
-        super(GARetinaHead, self).__init__(num_classes, in_channels, **kwargs)
+        super().__init__(num_classes, in_channels, **kwargs)
 
         if freeze:
             for c in [self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape,
@@ -66,10 +111,15 @@ class GARetinaHead(GuidedAnchorHead):
         self.conv_loc = nn.Conv2d(self.feat_channels, 1, 1)
         self.conv_shape = nn.Conv2d(self.feat_channels, self.num_anchors * 2,
                                     1)
-        self.feature_adaption_cls = FeatureAdaption(
+
+        self.cls_feat_enhance = nn.Conv2d(self.feat_channels, self.deformable_groups, 3, stride=1, padding=1)
+
+        self.feature_adaption_cls = FeatureAdaptionCls(
             self.feat_channels,
             self.feat_channels,
             kernel_size=3,
+            conv_offset_in_channels=self.deformable_groups,
+            conv_offset_kernel_size=3,
             deformable_groups=self.deformable_groups)
         self.feature_adaption_reg = FeatureAdaption(
             self.feat_channels,
@@ -111,8 +161,10 @@ class GARetinaHead(GuidedAnchorHead):
         loc_pred = self.conv_loc(cls_feat)
         shape_pred = self.conv_shape(reg_feat)
 
+        cls_feat_enhance_pre = self.cls_feat_enhance(cls_feat)
+
         if self.save_outs:
-            cls_feat, offset_cls = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)
+            cls_feat, offset_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
             reg_feat, offset_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
         else:
             cls_feat = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)

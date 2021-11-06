@@ -15,12 +15,12 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
+warmup_iters = 1000
 lr_step = [12, 16, 18]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 1
 
 model = dict(
     type='RetinaNet',
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.001,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',

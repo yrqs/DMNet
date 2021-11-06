@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
 
-
-PYTHON=${PYTHON:-"python"}
-CONFIG=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn_standard1/base.py
-GPUS=4
-PORT=${PORT:-27500}
-OMP_NUM_THREADS=4 \
-CUDA_VISIBLE_DEVICES=0,1,2,3 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
-    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
-    --validate \
-    --work_dir 'work_dirs/ga_retina_dmlneg6_nscope20_nalpha01_nthre02_voc_base2'
+#PYTHON=${PYTHON:-"python"}
+#CONFIG=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn_standard1/base.py
+#GPUS=4
+#PORT=${PORT:-27500}
+#OMP_NUM_THREADS=4 \
+#CUDA_VISIBLE_DEVICES=0,1,2,3 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+#    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
+#    --validate \
+#    --work_dir 'work_dirs/ga_retina_dmlneg6_nscope20_nalpha01_nthre02_voc_base2'
 
 CONFIG_BASE=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn_standard1/finetune
-WORK_DIR_BASE='work_dirs/ga_retina_dmlneg6_nscope20_nalpha01_nthre02_r101_voc_standard2'
+WORK_DIR_BASE='work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_standard1_ind2'
 
-GPU_ID=0,1
-GPUS=2
+GPU_ID=2
+GPUS=1
 PYTHON=${PYTHON:-"python"}
 CONFIG=${CONFIG_BASE}_1shot.py
-PORT=${PORT:-27500}
+PORT=${PORT:-87500}
 OMP_NUM_THREADS=1 \
 CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
     $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \

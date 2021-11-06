@@ -31,7 +31,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLNegHead3',
-        num_classes=21,
+        num_classes=81,
         in_channels=256,
         stacked_convs=stacked_convs,
         neg_sample_thresh=0.2,
@@ -145,7 +145,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    imgs_per_gpu=2,
+    imgs_per_gpu=1,
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
@@ -174,7 +174,7 @@ data = dict(
 evaluation = dict(interval=2, metric='bbox')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*2, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*1*4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
