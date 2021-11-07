@@ -3,7 +3,7 @@
 save_outs = False
 shot = 30
 shot_idx = [10, 30].index(shot)
-train_repeat_times = [10, 3][shot_idx]
+train_repeat_times = [10, 5][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -120,7 +120,7 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.01,
+    score_thr=0.05,
     nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)

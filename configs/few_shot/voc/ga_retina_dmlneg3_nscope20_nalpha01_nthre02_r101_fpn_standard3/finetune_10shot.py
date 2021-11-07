@@ -17,7 +17,7 @@ neg_alpha = 0.1
 
 warmup_iters = 500
 lr_step = [12, 16, 18]
-interval = 2
+interval = 1
 lr_base = 0.0001
 imgs_per_gpu = 2
 gpu_num = 2
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.01,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -120,8 +120,8 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.05,
-    nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
+    score_thr=0.02,
+    nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
 # dataset settings

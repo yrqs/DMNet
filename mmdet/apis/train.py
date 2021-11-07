@@ -175,7 +175,7 @@ def _dist_train(model,
         runner.register_hook(DistEvalHook(val_dataloader, **eval_cfg))
 
     if cfg.resume_from:
-        runner.resume(cfg.resume_from)
+        runner.resume(cfg.resume_from, resume_optimizer=cfg.resume_optimizer)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
     runner.run(data_loaders, cfg.workflow, cfg.total_epochs)

@@ -17,7 +17,7 @@ neg_alpha = 0.1
 
 warmup_iters = 500
 lr_step = [12, 16, 18]
-interval = 2
+interval = 1
 lr_base = 0.0001
 imgs_per_gpu = 2
 gpu_num = 2
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.01,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -120,8 +120,8 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.05,
-    nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
+    score_thr=0.02,
+    nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
 # dataset settings
@@ -212,6 +212,8 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
+# load_from = None
 load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth'
+# resume_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_lr0001x2x1_voc_standard2_10shot/epoch_12.pth'
 resume_from = None
 workflow = [('train', 1)]

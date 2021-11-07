@@ -3,7 +3,7 @@
 save_outs = False
 shot = 10
 shot_idx = [10, 30].index(shot)
-train_repeat_times = [10, 3][shot_idx]
+train_repeat_times = [10, 5][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -16,7 +16,7 @@ alpha = 0.15
 neg_alpha = 0.1
 
 warmup_iters = 1000
-lr_step = [14, 18, 20]
+lr_step = [18, 22, 24]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 1
@@ -120,7 +120,7 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.01,
+    score_thr=0.05,
     nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
@@ -209,5 +209,6 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_coco_base/epoch_24.pth'
-resume_from = None
+resume_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_coco_10shot/epoch_14.pth'
+resume_optimizer = False
 workflow = [('train', 1)]
