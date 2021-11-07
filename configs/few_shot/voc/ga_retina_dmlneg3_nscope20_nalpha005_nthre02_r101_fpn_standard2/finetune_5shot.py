@@ -1,9 +1,9 @@
 # model settings
 
 save_outs = False
-shot = 30
-shot_idx = [10, 30].index(shot)
-train_repeat_times = [10, 3][shot_idx]
+shot = 5
+shot_idx = [1, 2, 3, 5, 10].index(shot)
+train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -13,13 +13,13 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-neg_alpha = 0.1
+neg_alpha = 0.05
 
-warmup_iters = 1000
-lr_step = [14, 18, 20]
+warmup_iters = 500
+lr_step = [12, 16, 18]
 interval = 2
 lr_base = 0.0001
-imgs_per_gpu = 1
+imgs_per_gpu = 2
 gpu_num = 2
 
 model = dict(
@@ -43,7 +43,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLNegHead3',
-        num_classes=81,
+        num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
         neg_sample_thresh=0.2,
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.01,
+        loc_filter_thr=0.1,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -120,13 +120,13 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.01,
+    score_thr=0.05,
     nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
 # dataset settings
-dataset_type = 'CocoDataset'
-data_root = 'data/coco/'
+dataset_type = 'VOCDataset'
+data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -157,32 +157,36 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    imgs_per_gpu=1,
+    imgs_per_gpu=imgs_per_gpu,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
         times=train_repeat_times,
         dataset=dict(
             type=dataset_type,
-            fixed_cls_idx=True,
-            ann_file=[data_root + 'annotations/instances_train2014_' + str(shot) + 'shot_novel_standard.json',
-                      data_root + 'annotations/instances_val2014_' + str(shot) + 'shot_novel_standard.json',
-                      ],
-            img_prefix=[data_root + 'images/trainval2014/', data_root + 'images/trainval2014/',],
+            ann_file=[
+                data_root + 'VOC2007/ImageSets/Main/trainval_' + str(shot) + 'shot_novel_standard.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_' + str(shot) + 'shot_novel_standard.txt'
+            ],
+            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        fixed_cls_idx=True,
-        ann_file=data_root + 'annotations/instances_minival2014.json',
-        img_prefix=data_root + 'images/trainval2014/',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        fixed_cls_idx=True,
-        ann_file=data_root + 'annotations/instances_minival2014.json',
-        img_prefix=data_root + 'images/trainval2014/',
+        # ann_file=[
+        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
+        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
+        # ],
+        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
-evaluation = dict(interval=interval, metric='bbox')
+
+evaluation = dict(interval=interval, metric='mAP')
 
 # optimizer
 optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
@@ -208,6 +212,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_coco_base/epoch_24.pth'
+load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

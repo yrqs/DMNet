@@ -15,8 +15,8 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
-lr_step = [12, 16, 18]
+warmup_iters = 1000
+lr_step = [14, 18, 20]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 1
@@ -43,7 +43,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLNegHead3',
-        num_classes=21,
+        num_classes=81,
         in_channels=256,
         stacked_convs=stacked_convs,
         neg_sample_thresh=0.2,
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.01,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -120,7 +120,7 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.05,
+    score_thr=0.01,
     nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
@@ -130,7 +130,7 @@ data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
-    dict(type='LoadImageFromFile', to_float32=True),
+    dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Expand'),
     dict(type='MinIoURandomCrop'),
@@ -156,10 +156,9 @@ test_pipeline = [
             dict(type='Collect', keys=['img']),
         ])
 ]
-
 data = dict(
-    imgs_per_gpu=imgs_per_gpu,
-    workers_per_gpu=gpu_num,
+    imgs_per_gpu=1,
+    workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
         times=train_repeat_times,
@@ -183,19 +182,19 @@ data = dict(
         ann_file=data_root + 'annotations/instances_minival2014.json',
         img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline))
-evaluation = dict(interval=2, metric='bbox')
+evaluation = dict(interval=interval, metric='bbox')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.0001*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=1000,
+    warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
-    step=[14, 18])
-checkpoint_config = dict(interval=2)
+    step=[lr_step[0], lr_step[1]])
+checkpoint_config = dict(interval=interval)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -205,10 +204,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 20
+total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base1/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_coco_base/epoch_24.pth'
 resume_from = None
 workflow = [('train', 1)]
