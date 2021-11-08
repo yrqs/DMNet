@@ -3,7 +3,7 @@
 save_outs = False
 shot = 1
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+train_repeat_times = [25, 20, 15, 10, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -15,7 +15,7 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
+warmup_iters = 1000
 lr_step = [12, 16, 18]
 interval = 1
 lr_base = 0.0001
@@ -54,7 +54,8 @@ model = dict(
             cls_norm=False,
             neg_scope=2.0,
             beta=0.3,
-            neg_num_modes=3),
+            neg_num_modes=3,
+            freeze=False),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -212,6 +213,7 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
+# load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_12.pth'
 load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

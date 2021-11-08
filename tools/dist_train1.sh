@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 CONFIG_BASE=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn_standard2/finetune
-WORK_DIR_BASE='work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_voc_standard2_1108'
+WORK_DIR_BASE='work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_voc_standard2_1108_ind2'
 
 GPU_ID=2,3
 GPUS=2
