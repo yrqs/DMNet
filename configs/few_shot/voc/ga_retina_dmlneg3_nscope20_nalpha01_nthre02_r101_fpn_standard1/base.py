@@ -152,11 +152,13 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
-            ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
-            ],
-            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            # ann_file=[
+            #     data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
+            #     data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
+            # ],
+            # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+            img_prefix=data_root + 'VOC2007/',
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,

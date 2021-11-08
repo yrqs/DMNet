@@ -197,8 +197,8 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
              m=ss)
 
     for i in range(X_norm.shape[0] - num_cls * (num_modes_neg + 1)):
-        cls_pre_name = '' if cls_pre_score[i] <= 0.2 else CLASSES_VOC[cls_pre_idx[i]]
-        cls_pre_score_text = '' if cls_pre_score[i] < 0.2 else str(int(float(cls_pre_score[i]) * 100))
+        cls_pre_name = '' if cls_pre_score[i] <= score_thresh else CLASSES_VOC[cls_pre_idx[i]]
+        cls_pre_score_text = '' if cls_pre_score[i] < score_thresh else str(int(float(cls_pre_score[i]) * 100))
         # cls_pre_score_text = ''
         plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name + cls_pre_score_text, color='k',
                  fontdict={'weight': 'bold', 'size': 20})
@@ -403,6 +403,8 @@ def show_img_with_marks(img, outs, scale_idx):
     plt.xticks([])
     plt.yticks([])
 
+score_thresh = 0.1
+
 if __name__ == '__main__':
     cfg = Config.fromfile(config_file)
 
@@ -415,17 +417,18 @@ if __name__ == '__main__':
         shuffle=False)
 
     feature_type = 'ga_retina_dmlneg3'
-    root_path = 'mytest/ga_dmlneg3_base2_1shot/'
+    root_path = 'mytest/ga_dmlneg3_10s_t3s/'
 
     file_name_base, outs_names = file_outs_dict[feature_type]
     file_name_base_path = root_path + file_name_base
-    file_num = 17
+    file_num = 50
 
     for i, data in enumerate(data_loader):
         # if not scan_img and i not in [2]:
         #     continue
         img = data['img'][0]
         img = img.squeeze(0)
+        img = img.flip(dims=[2])
         if scan_img:
             plt.imshow(img)
             plt.xlabel('%d' % i)

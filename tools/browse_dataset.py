@@ -7,6 +7,8 @@ from mmcv import Config
 
 from mmdet.datasets.builder import build_dataset
 
+import tqdm
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Browse a dataset')
@@ -35,8 +37,8 @@ def parse_args():
 def retrieve_data_cfg(config_path, skip_type):
     cfg = Config.fromfile(config_path)
     train_data_cfg = cfg.data.train
-    train_data_cfg['pipeline'] = [
-        x for x in train_data_cfg.pipeline if x['type'] not in skip_type
+    train_data_cfg['dataset']['pipeline'] = [
+        x for x in train_data_cfg.dataset.pipeline if x['type'] not in skip_type
     ]
 
     return cfg
@@ -48,21 +50,61 @@ def main():
 
     dataset = build_dataset(cfg.data.train)
 
-    progress_bar = mmcv.ProgressBar(len(dataset))
-    for item in dataset:
-        filename = os.path.join(args.output_dir,
-                                Path(item['filename']).name
-                                ) if args.output_dir is not None else None
-        mmcv.imshow_det_bboxes(
-            item['img'],
-            item['gt_bboxes'],
-            item['gt_labels'] - 1,
-            class_names=dataset.CLASSES,
-            show=not args.not_show,
-            out_file=filename,
-            wait_time=args.show_interval)
-        progress_bar.update()
+    # progress_bar = mmcv.ProgressBar(len(dataset))
+    valid_inds = []
+    have_label_list = [0] * 21
+    for item in tqdm.tqdm(dataset):
+        # filename = os.path.join(args.output_dir,
+        #                         Path(item['filename']).name
+        #                         ) if args.output_dir is not None else None
+        # mmcv.imshow_det_bboxes(
+        #     item['img'],
+        #     item['gt_bboxes'],
+        #     item['gt_labels'] - 1,
+        #     class_names=dataset.CLASSES,
+        #     show=not args.not_show,
+        #     out_file=filename,
+        #     wait_time=args.show_interval)
+        # progress_bar.update()
+        labels = item['gt_labels']
+        filename = item['img_info']['filename']
+        ind = filename.split('/')[-1].split('.')[0]
 
+        have_label_set = set()
+        temp_list = [0] * 21
+        for l in labels:
+            if have_label_list[l] + temp_list[l] >= 3:
+                have_label_set = set()
+                break
+            temp_list[l] += 1
+            have_label_set.add(l)
+        if len(have_label_set) > 0:
+            for idx, label_num in enumerate(temp_list):
+                have_label_list[idx] += label_num
+            valid_inds.append(ind)
+        ok = True
+        for hl_i, hl in enumerate(have_label_list):
+            if hl_i == 0:
+                continue
+            if hl < 3:
+                ok = False
+                break
+        if ok:
+            print(have_label_list)
+            print(valid_inds)
+            with open('mytest/test_3shot.txt', 'w') as f:
+                for vi in valid_inds:
+                    f.write(vi+'\n')
+            return
+    print(valid_inds)
+    labels_num = [0] * 21
+    # for i in valid_inds:
+    #     ann_info = self.get_ann_info(i)
+    #     labels = list(set(ann_info['labels']))
+    #     for l in labels:
+    #         labels_num[l] += 1
+    # print('labels_num: ', labels_num)
+    # print('valid_inds: ', valid_inds)
 
 if __name__ == '__main__':
     main()
