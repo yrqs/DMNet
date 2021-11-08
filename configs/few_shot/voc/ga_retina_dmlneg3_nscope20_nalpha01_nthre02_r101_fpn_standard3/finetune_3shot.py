@@ -1,7 +1,7 @@
 # model settings
 
 save_outs = False
-shot = 1
+shot = 3
 shot_idx = [1, 2, 3, 5, 10].index(shot)
 train_repeat_times = [25, 20, 15, 10, 10][shot_idx]
 freeze = False

@@ -151,7 +151,8 @@ def show_emb_vectors_TSNE(outs, img=None, dim=2):
 def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     emb_vectors_tuple = outs['emb_vectors']
     reps_tuple = outs['reps']
-    cls_scores_tuple = outs['cls_scores']
+    reps_neg_tuple = outs['reps_neg']
+    cls_scores_tuple = outs['cls_score']
 
     # plt.figure(1)
     # plt.figure(1, figsize=(10, 6))
@@ -161,12 +162,16 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
 
     reps = reps_tuple[scale_idx]
     reps = reps.contiguous().view(-1, reps.size(-1))
+    reps_neg = reps_neg_tuple[scale_idx]
+    num_modes_neg = reps_neg.shape[1]
+    reps_neg = reps_neg.contiguous().view(-1, reps_neg.size(-1))
     emb_vectors = emb_vectors_tuple[scale_idx]
     emb_vectors = emb_vectors[0]
     emb_vectors = emb_vectors.permute(1, 2, 0).contiguous()
     emb_vectors = emb_vectors.view(-1, emb_vectors.size(-1))
 
-    vectors = torch.cat([emb_vectors, reps], 0)
+    vectors = torch.cat([emb_vectors, reps, reps_neg], 0)
+    # vectors = torch.cat([emb_vectors, reps], 0)
     vectors = vectors.numpy()
     tsne = manifold.TSNE(n_components=2, init='pca', perplexity=20, n_iter=1000)
     X_tsne = tsne.fit_transform(vectors)
@@ -181,25 +186,31 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     cls_scores = cls_scores.view(-1, cls_scores.size(-1))
     # cls_scores = cls_scores.softmax(-1)
     cls_pre_score, cls_pre_idx = cls_scores.max(dim=-1, keepdim=True)
-    num_cls = len(CLASSES_VOC)
 
     ss = []
+    num_cls = len(CLASSES_VOC)
     for y in range(0, f_h):
         for x in range(0, f_w):
             ss.append(shapes[x])
     # plt.scatter(X_norm[:-num_cls, 0], X_norm[:-num_cls, 1], c=range(X_norm.shape[0]-num_cls), cmap='rainbow', marker=ss)
-    mscatter(X_norm[:-num_cls, 0], X_norm[:-num_cls, 1], c=range(X_norm.shape[0] - num_cls), s=100, cmap='rainbow',
+    mscatter(X_norm[:-num_cls*(num_modes_neg+1), 0], X_norm[:-num_cls*(num_modes_neg+1), 1], c=range(X_norm.shape[0] - num_cls*(num_modes_neg+1)), s=100, cmap='rainbow',
              m=ss)
 
-    # plt.plot(X_norm[:-num_cls, 0], X_norm[:-num_cls, 1], 'r.')
-    for i in range(X_norm.shape[0] - num_cls):
-        cls_pre_name = '' if cls_pre_idx[i] == 0 else CLASSES_VOC[cls_pre_idx[i] - 1]
-        cls_pre_score_text = '' if cls_pre_idx[i] == 0 else str(float(cls_pre_score[i]))
-        plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name+cls_pre_score_text, color='k',
+    for i in range(X_norm.shape[0] - num_cls * (num_modes_neg + 1)):
+        cls_pre_name = '' if cls_pre_score[i] <= 0.2 else CLASSES_VOC[cls_pre_idx[i]]
+        cls_pre_score_text = '' if cls_pre_score[i] < 0.2 else str(int(float(cls_pre_score[i]) * 100))
+        # cls_pre_score_text = ''
+        plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name + cls_pre_score_text, color='k',
                  fontdict={'weight': 'bold', 'size': 20})
-    plt.plot(X_norm[-num_cls:, 0], X_norm[-num_cls:, 1], 'g.')
-    for i in range(num_cls):
-        plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i + 1)], color='deeppink',
+    plt.plot(X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 0],
+             X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 1], 'g.')
+    plt.plot(X_norm[-num_cls * num_modes_neg:, 0], X_norm[-num_cls * num_modes_neg:, 1], 'r.')
+    for i in range(num_cls * num_modes_neg, num_cls * (num_modes_neg + 1)):
+        plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i - num_cls * num_modes_neg + 1)],
+                 color='deeppink',
+                 fontdict={'weight': 'bold', 'size': 20})
+    for i in range(0, num_cls * num_modes_neg):
+        plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i // num_modes_neg + 1)], color='blue',
                  fontdict={'weight': 'bold', 'size': 20})
     plt.xticks([])
     plt.yticks([])
@@ -402,6 +413,40 @@ if __name__ == '__main__':
         workers_per_gpu=cfg.data.workers_per_gpu,
         dist=False,
         shuffle=False)
+
+    feature_type = 'ga_retina_dmlneg3'
+    root_path = 'mytest/ga_dmlneg3_base2_1shot/'
+
+    file_name_base, outs_names = file_outs_dict[feature_type]
+    file_name_base_path = root_path + file_name_base
+    file_num = 17
+
+    for i, data in enumerate(data_loader):
+        # if not scan_img and i not in [2]:
+        #     continue
+        img = data['img'][0]
+        img = img.squeeze(0)
+        if scan_img:
+            plt.imshow(img)
+            plt.xlabel('%d' % i)
+            plt.show()
+            continue
+
+        file_name = file_name_base_path[:-4] + str(i + 1) + file_name_base_path[-4:]
+        outs = torch.load(file_name, map_location=torch.device("cpu"))
+
+        plt.rc('font', family='Times New Roman')
+
+        x_label_list = ['Last epoch', 'Last epoch']
+        scale_idx_list = [-2, -1]
+        # show_emb_vectors_TSNE_multi_scale(outs, scale_idx_list=scale_idx_list, img=img, x_label_list=x_label_list)
+        for scale_idx in scale_idx_list:
+            plt.figure(1)
+            show_img_with_marks(img, outs, scale_idx)
+            plt.figure(2)
+            show_emb_vectors_TSNE_single(outs, scale_idx)
+            plt.show()
+    exit()
 
     if show_type is 'multi-img':
         outs_list = []

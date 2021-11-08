@@ -7,13 +7,13 @@ GPU_ID=0,1
 GPUS=2
 PORT=${PORT:-67500}
 
-PYTHON=${PYTHON:-"python"}
-CONFIG=${CONFIG_BASE}_1shot.py
-OMP_NUM_THREADS=1 \
-CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
-    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
-    --validate \
-    --work_dir $WORK_DIR_BASE'_1shot'
+#PYTHON=${PYTHON:-"python"}
+#CONFIG=${CONFIG_BASE}_1shot.py
+#OMP_NUM_THREADS=1 \
+#CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+#    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
+#    --validate \
+#    --work_dir $WORK_DIR_BASE'_1shot'
 
 PYTHON=${PYTHON:-"python"}
 CONFIG=${CONFIG_BASE}_2shot.py
