@@ -322,7 +322,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
             return cls_score, bbox_pred, shape_pred, loc_pred, distance, cls_score_neg, distance_neg, probs_ori
         else:
             if self.save_outs:
-                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg, distance, cls_score, reps, reps_neg
+                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg, distance, cls_score, reps, reps_neg, probs_ori
             else:
                 return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -332,7 +332,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
             return multi_apply(self.forward_single, feats)
         else:
             if self.save_outs:
-                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, offsets_cls, offsets_reg, distances, cls_score, reps, reps_neg = multi_apply(self.forward_single, feats)
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, offsets_cls, offsets_reg, distances, cls_score, reps, reps_neg, probs_ori = multi_apply(self.forward_single, feats)
                 res = dict()
                 res['cls_feat'] = cls_feat
                 res['reg_feat'] = reg_feat
@@ -347,6 +347,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
                 res['cls_score'] = cls_score
                 res['reps'] = reps
                 res['reps_neg'] = reps_neg
+                res['probs_ori'] = probs_ori
                 save_idx = 1
                 save_path_base = 'mytest/ga_retina_dmlneg3_feature.pth'
                 save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]

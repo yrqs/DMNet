@@ -8,6 +8,7 @@ from mmcv import Config
 from mmdet.datasets.builder import build_dataset
 
 import tqdm
+import cv2
 
 
 def parse_args():
@@ -47,7 +48,7 @@ def retrieve_data_cfg(config_path, skip_type):
 def main():
     args = parse_args()
     cfg = retrieve_data_cfg(args.config, args.skip_type)
-
+    print(cfg)
     dataset = build_dataset(cfg.data.train)
 
     # progress_bar = mmcv.ProgressBar(len(dataset))
@@ -97,14 +98,31 @@ def main():
                     f.write(vi+'\n')
             return
     print(valid_inds)
-    labels_num = [0] * 21
-    # for i in valid_inds:
-    #     ann_info = self.get_ann_info(i)
-    #     labels = list(set(ann_info['labels']))
-    #     for l in labels:
-    #         labels_num[l] += 1
-    # print('labels_num: ', labels_num)
-    # print('valid_inds: ', valid_inds)
+
+def main1():
+    args = parse_args()
+    cfg = retrieve_data_cfg(args.config, args.skip_type)
+    print(cfg)
+    dataset = build_dataset(cfg.data.train)
+
+    # progress_bar = mmcv.ProgressBar(len(dataset))
+    for item in tqdm.tqdm(dataset):
+        filename = os.path.join(args.output_dir,
+                                Path(item['filename']).name
+                                ) if args.output_dir is not None else None
+        # cv2.imshow('1', item['img']/255)
+        # cv2.waitKey(2000)
+        mmcv.imshow_det_bboxes(
+            item['img']/255,
+            item['gt_bboxes'],
+            item['gt_labels'] - 1,
+            class_names=dataset.CLASSES,
+            show=True,
+            # show=not args.not_show,
+            out_file=filename,
+            wait_time=args.show_interval)
+        # progress_bar.update()
+
 
 if __name__ == '__main__':
-    main()
+    main1()

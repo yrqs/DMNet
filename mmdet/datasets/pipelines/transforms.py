@@ -6,6 +6,7 @@ from numpy import random
 
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
 from ..registry import PIPELINES
+import cv2
 
 try:
     from imagecorruptions import corrupt

@@ -3,7 +3,7 @@
 save_outs = False
 shot = 1
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [20, 10, 10, 10, 10][shot_idx]
+train_repeat_times = [25, 25, 20, 15, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -15,12 +15,12 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
-lr_step = [12, 16, 20]
-interval = 1
+warmup_iters = 1000
+lr_step = [12, 16, 18]
+interval = 2
 lr_base = 0.0001
-imgs_per_gpu = 2
-gpu_num = 2
+imgs_per_gpu = 1
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -54,7 +54,8 @@ model = dict(
             cls_norm=False,
             neg_scope=2.0,
             beta=0.3,
-            neg_num_modes=3),
+            neg_num_modes=3,
+            freeze=False),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -120,7 +121,7 @@ train_cfg = dict(
 test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
-    score_thr=0.05,
+    score_thr=0.02,
     nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
@@ -133,8 +134,8 @@ train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Expand'),
-    # dict(type='MinIoURandomCrop', min_ious=(0.5, 0.7, 0.9)),
-    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='MinIoURandomCrop'),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -145,7 +146,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 600),
+        img_scale=(1333, 800),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -212,6 +213,7 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base1/epoch_16.pth'
+# load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_voc_base2/epoch_12.pth'
+load_from = 'work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_1333_r101_voc_base2/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

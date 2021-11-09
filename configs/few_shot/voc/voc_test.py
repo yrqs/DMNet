@@ -5,13 +5,13 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
-    # dict(type='MinIoURandomCrop'),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    dict(type='Normalize', **img_norm_cfg),
-    dict(type='Pad', size_divisor=32),
-    dict(type='DefaultFormatBundle'),
+    # dict(type='Normalize', **img_norm_cfg),
+    # dict(type='Pad', size_divisor=32),
+    # dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
 ]
 test_pipeline = [

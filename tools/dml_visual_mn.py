@@ -373,8 +373,6 @@ def show_emb_vectors_TSNE_multi_img(outs_list, scale_idx_list=None, img_list=Non
 
     plt.show()
 
-scan_img = False
-show_type = ['multi-img', 'multi-epoch', 'multi-scale', 'scan-image'][1]
 
 def show_img_with_marks(img, outs, scale_idx):
     plt.imshow(img)
@@ -404,6 +402,14 @@ def show_img_with_marks(img, outs, scale_idx):
     plt.yticks([])
 
 score_thresh = 0.1
+scan_img = True
+show_type = ['multi-img', 'multi-epoch', 'multi-scale', 'scan-image'][1]
+
+show_list = []
+not_show_list = []
+
+filter_show = False
+filter_not_show = True
 
 if __name__ == '__main__':
     cfg = Config.fromfile(config_file)
@@ -424,8 +430,12 @@ if __name__ == '__main__':
     file_num = 50
 
     for i, data in enumerate(data_loader):
-        # if not scan_img and i not in [2]:
-        #     continue
+        if not scan_img:
+            continue
+        if filter_show and i not in show_list:
+            continue
+        if filter_not_show and i in not_show_list:
+            continue
         img = data['img'][0]
         img = img.squeeze(0)
         img = img.flip(dims=[2])

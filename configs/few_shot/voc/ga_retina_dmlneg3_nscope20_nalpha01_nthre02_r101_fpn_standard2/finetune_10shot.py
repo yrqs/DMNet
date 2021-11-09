@@ -15,12 +15,12 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 1000
-lr_step = [12, 16, 18]
-interval = 1
+warmup_iters = 300
+lr_step = [8, 16, 20]
+interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 8
 
 model = dict(
     type='RetinaNet',
