@@ -319,7 +319,7 @@ class GARetinaDMLNegHead7(GuidedAnchorHead):
             return cls_score, bbox_pred, shape_pred, loc_pred, distance, cls_score_neg, distance_neg, probs_ori
         else:
             if self.save_outs:
-                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg, distances, probs_cls, cls_score
+                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, offset_cls, offset_reg
             else:
                 return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -329,22 +329,17 @@ class GARetinaDMLNegHead7(GuidedAnchorHead):
             return multi_apply(self.forward_single, feats)
         else:
             if self.save_outs:
-                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, emb_vectors, cls_feat_enhance_pres, offsets_cls, offsets_reg, distances, probs_cls, cls_score = multi_apply(self.forward_single, feats)
+                cls_scores, bbox_preds, shape_preds_reg, loc_preds, cls_feat, reg_feat, cls_feat_adp, reg_feat_adp, offsets_cls, offsets_reg = multi_apply(self.forward_single, feats)
                 res = dict()
                 res['cls_feat'] = cls_feat
                 res['reg_feat'] = reg_feat
                 res['cls_feat_adp'] = cls_feat_adp
                 res['reg_feat_adp'] = reg_feat_adp
                 res['cls_loc'] = loc_preds
-                res['cls_feat_enhance'] = cls_feat_enhance_pres
-                res['emb_vectors'] = emb_vectors
                 res['offsets_cls'] = offsets_cls
                 res['offsets_reg'] = offsets_reg
-                res['distances'] = distances
-                res['probs_cls'] = probs_cls
-                res['cls_score'] = cls_score
                 save_idx = 1
-                save_path_base = 'mytest/ga_retina_dml3_feature.pth'
+                save_path_base = 'mytest/ga_retina_dmlneg7_feature.pth'
                 save_path = save_path_base[:-4] + str(save_idx) + save_path_base[-4:]
                 while os.path.exists(save_path):
                     save_idx += 1

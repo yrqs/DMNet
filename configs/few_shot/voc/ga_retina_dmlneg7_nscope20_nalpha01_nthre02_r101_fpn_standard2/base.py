@@ -1,6 +1,6 @@
 # model settings
 
-save_outs = False
+save_outs = True
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
@@ -172,7 +172,9 @@ data = dict(
         # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         # ann_file='mytest/test_1img.txt',
         # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        # img_prefix=data_root + 'VOC2007/',
+        ann_file='mytest/test_3shot.txt',
         img_prefix=data_root + 'VOC2007/',
         # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
         # img_prefix='mytest/VOC2007',

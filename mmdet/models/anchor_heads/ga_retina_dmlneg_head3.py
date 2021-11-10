@@ -395,7 +395,7 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
         # get squares and guided anchors
         squares_list, guided_anchors_list, _ = self.get_anchors(
             featmap_sizes, shape_preds, loc_preds, img_metas, device=device)
-
+        print(squares_list)
         # get shape targets
         sampling = False if not hasattr(cfg, 'ga_sampler') else True
         shape_targets = ga_shape_target(

@@ -5,9 +5,10 @@ PYTHON=${PYTHON:-"python"}
 #CONFIG=$1
 #CHECKPOINT=$2
 #GPUS=$3
+#CHECKPOINT=work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_voc_standard1_10shot/epoch_16.pth
 
-CONFIG=configs/few_shot/voc/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_fpn_standard2/base.py
-CHECKPOINT=work_dirs/ga_retina_dmlneg3_nscope20_nalpha01_nthre02_r101_voc_standard1_10shot/epoch_16.pth
+CONFIG=configs/few_shot/voc/ga_retina_dmlneg6_nscope20_nalpha01_nthre02_r101_fpn_standard2/base.py
+CHECKPOINT=work_dirs/ga_retina_dmlneg6_nscope20_nalpha01_nthre02_voc_base2/epoch_16.pth
 GPUS=1
 PORT=${PORT:-79500}
 

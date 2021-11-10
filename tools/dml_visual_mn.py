@@ -8,6 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn import manifold
 import numpy as np
 import matplotlib.patches as mpathes
+from matplotlib import rc
+# rc('text', usetex=True)
 
 from mmcv import Config
 from mmdet.datasets import build_dataloader, build_dataset
@@ -30,14 +32,14 @@ file_outs_dict  = {
         'ga_retina_dml14D' : ('ga_retina_dml14D_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_loc', 'cls_feat_enhance', 'probs_bg']),
         'ga_retina_dml16D' : ('ga_retina_dml16D_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_loc', 'cls_feat_enhance', 'probs_bg']),
         'ga_retina_dml24' : ('ga_retina_dml24_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_feat_enhance', 'reg_feat_enhance']),
-        'ga_retina_dmlneg3' : ('ga_retina_dmlneg3_feature.pth', ['cls_scores', 'emb_vectors', 'reps', 'reps_neg']),
+        'ga_retina_dmlneg3' : ('ga_retina_dmlneg3_feature.pth', ['cls_scores', 'emb_vectors', 'reps', 'reps_neg', 'probs_ori']),
     }
 
 config_file = 'configs/few_shot/voc/voc_test.py'
 
-CLASSES_VOC = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
-               'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
-               'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
+CLASSES_VOC = ('plane', 'bike', 'bird*', 'boat', 'bottle', 'bus*', 'car', 'cat',
+               'chair', 'cow*', 'table', 'dog', 'horse', 'motorbike*', 'person',
+               'pottedplant', 'sheep', 'sofa*', 'train', 'tv')
 
 shapes = ['o', 'v', '^', '<', '>', 's', '*', 'p', 'P', 'X', 'D', '$\dag$', 'H', '+', 'x', '|', '_', ]
 
@@ -153,7 +155,7 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     reps_tuple = outs['reps']
     reps_neg_tuple = outs['reps_neg']
     cls_scores_tuple = outs['cls_score']
-
+    probs_ori_tuple = outs['probs_ori']
     # plt.figure(1)
     # plt.figure(1, figsize=(10, 6))
     # for i in range(len(reps_tuple)):
@@ -184,6 +186,12 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     cls_scores = cls_scores[0]
     cls_scores = cls_scores.permute(1, 2, 0).contiguous()
     cls_scores = cls_scores.view(-1, cls_scores.size(-1))
+
+    probs_ori = probs_ori_tuple[scale_idx]
+    probs_ori = probs_ori[0]
+    probs_ori = probs_ori.permute(1, 2, 0).contiguous()
+    probs_ori = probs_ori.view(-1, probs_ori.size(-1))
+
     # cls_scores = cls_scores.softmax(-1)
     cls_pre_score, cls_pre_idx = cls_scores.max(dim=-1, keepdim=True)
 
@@ -199,8 +207,11 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     for i in range(X_norm.shape[0] - num_cls * (num_modes_neg + 1)):
         cls_pre_name = '' if cls_pre_score[i] <= score_thresh else CLASSES_VOC[cls_pre_idx[i]]
         cls_pre_score_text = '' if cls_pre_score[i] < score_thresh else str(int(float(cls_pre_score[i]) * 100))
+        cls_pre_prob_ori_text = '' if probs_ori[i, cls_pre_idx[i]] < score_thresh else '|' + str(int(float(probs_ori[i, cls_pre_idx[i]]) * 100))
         # cls_pre_score_text = ''
-        plt.text(X_norm[i, 0], X_norm[i, 1], cls_pre_name + cls_pre_score_text, color='k',
+        # show_text = cls_pre_name + cls_pre_score_text + cls_pre_prob_ori_text
+        show_text = cls_pre_name
+        plt.text(X_norm[i, 0], X_norm[i, 1], show_text, color='k',
                  fontdict={'weight': 'bold', 'size': 20})
     plt.plot(X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 0],
              X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 1], 'g.')
@@ -401,15 +412,16 @@ def show_img_with_marks(img, outs, scale_idx):
     plt.xticks([])
     plt.yticks([])
 
-score_thresh = 0.1
-scan_img = True
+score_thresh = 0.2
+scan_img = False
 show_type = ['multi-img', 'multi-epoch', 'multi-scale', 'scan-image'][1]
 
-show_list = []
+show_list = [43, 44, 46, 47, ]
+# show_list = [13, 16, 18, 32, 34, 38, 43, 44, 46, 47, ]
 not_show_list = []
 
-filter_show = False
-filter_not_show = True
+filter_show = True
+filter_not_show = False
 
 if __name__ == '__main__':
     cfg = Config.fromfile(config_file)
@@ -430,7 +442,7 @@ if __name__ == '__main__':
     file_num = 50
 
     for i, data in enumerate(data_loader):
-        if not scan_img:
+        if scan_img:
             continue
         if filter_show and i not in show_list:
             continue

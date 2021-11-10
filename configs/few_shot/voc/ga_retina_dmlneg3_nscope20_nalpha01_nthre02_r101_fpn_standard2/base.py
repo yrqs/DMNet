@@ -1,6 +1,6 @@
 # model settings
 
-save_outs = True
+save_outs = False
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),

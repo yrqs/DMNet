@@ -181,7 +181,8 @@ def show_cls_feat_enhances(outs):
     sub_row_num = len(cls_feat_enhances)
     sub_col_num = cls_feat_enhances[0].size(1)
     for cls_feat_enhance_idx, cls_feat_enhance in enumerate(cls_feat_enhances):
-        cls_feat_enhance = cls_feat_enhance.squeeze(0).sigmoid()
+        # cls_feat_enhance = cls_feat_enhance.squeeze(0).sigmoid()
+        cls_feat_enhance = cls_feat_enhance.squeeze(0).relu()
         for i in range(cls_feat_enhance.size(0)):
             cfe = cls_feat_enhance[i]
             plt.subplot(sub_row_num, sub_col_num, sub_col_num*cls_feat_enhance_idx + i+1)
@@ -189,6 +190,18 @@ def show_cls_feat_enhances(outs):
             # plt.axis('off')
             fig.colorbar(im)
     plt.show()
+
+def show_cls_feat_enhances_sum(outs):
+    cls_feat_enhances = outs['cls_feat_enhance']
+    fig = plt.figure()
+    sub_row_num = len(cls_feat_enhances)
+    sub_col_num = cls_feat_enhances[0].size(1)
+    for cls_feat_enhance_idx, cls_feat_enhance in enumerate(cls_feat_enhances):
+        # cls_feat_enhance = cls_feat_enhance.squeeze(0).sigmoid()
+        cls_feat_enhance = cls_feat_enhance.squeeze(0).relu()
+        cls_feat_enhance_l2 = torch.sqrt((cls_feat_enhance**2).sum(0))
+        im = plt.imshow(cls_feat_enhance_l2.clone().cpu(), cmap='rainbow')
+        plt.show()
 
 def show_offsets(outs):
     offsets_cls = outs['offsets_cls']
@@ -300,6 +313,14 @@ CLASSES_VOC = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', '
                'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
                'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
 
+
+show_list = [13, 43, 44, 46, 47, ]
+# show_list = [13, 16, 18, 32, 34, 38, 43, 44, 46, 47, ]
+not_show_list = []
+
+filter_show = True
+filter_not_show = False
+
 if __name__ == '__main__':
     file_outs_dict  = {
         'FPN' : ('fpn_outs.pth', ['laterals_ori', 'laterals', 'fpn_outs']),
@@ -316,6 +337,8 @@ if __name__ == '__main__':
         'ga_retina_dml14D' : ('ga_retina_dml14D_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_loc', 'cls_feat_enhance', 'probs_bg']),
         'ga_retina_dml16D' : ('ga_retina_dml16D_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_loc', 'cls_feat_enhance', 'probs_bg']),
         'ga_retina_dml24' : ('ga_retina_dml24_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp', 'cls_feat_enhance', 'reg_feat_enhance']),
+        'ga_retina_dmlneg3' : ('ga_retina_dmlneg3_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp']),
+        'ga_retina_dmlneg7' : ('ga_retina_dmlneg7_feature.pth', ['cls_feat', 'reg_feat', 'cls_feat_adp', 'reg_feat_adp']),
     }
     # file_name = 'mytest/dfpn_outs1.pth'
     # outs_names = ['laterals', 'cls_outs', 'reg_outs']
@@ -343,27 +366,32 @@ if __name__ == '__main__':
     # outs_names = ['laterals', 'fpn_outs']
 
     # feature_type = 'ga_retina_dml3'
-    feature_type = 'FPN'
+    # feature_type = 'ga_retina_dmlneg7'
+    feature_type = 'ga_retina_dmlneg3'
     # feature_type = 'DFPN4'
-    root_path = 'mytest/ga_retina_dml3_base_epoch_16_1shot/'
+    # root_path = 'mytest/ga_dmlneg7_base2_t3s/'
+    root_path = 'mytest/ga_dmlneg3_base2_t3s/'
     # root_path = 'mytest/ga_retina_dml3_dfpn2_1shot/'
     # root_path = 'mytest/ga_retina_dml2D_fpn_1shot/'
     # root_path = 'mytest/ga_retina_dml3_fpn_1shot/'
 
     file_name_base, outs_names = file_outs_dict[feature_type]
     file_name_base = root_path + file_name_base
-    file_num = 17
+    file_num = 50
     feature_pyramids_similarity_list = []
     for i in range(file_num):
+        if filter_show and i not in show_list:
+            continue
         file_name = file_name_base[:-4] + str(i+1) + file_name_base[-4:]
         outs = torch.load(file_name, map_location=torch.device("cpu"))
         # show_feature_pyramids_L2(outs, outs_names)
         # plot_feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'])
         # show_cls_feat_enhances(outs)
+        show_cls_feat_enhances_sum(outs)
         # show_emb_vectors_TSNE(outs)
         # show_offsets(outs)
         # show_reg_feat_enhances(outs)
-        show_feature_pyramids(outs, outs_names)
+        # show_feature_pyramids(outs, outs_names)
         # show_emb_vectors(outs)
         # feature_pyramids_similarity_list.append(feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'], norm=False))
     #     feature_pyramids_similarity_list.append(feature_pyramids_similarity(outs['cls_feat'], outs['reg_feat']))
