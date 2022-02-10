@@ -1,1 +1,2 @@
-# DMNet
+# Decoupled Metric Network for Single-Stage Few-Shot Object Detection
+Coming soon...
