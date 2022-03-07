@@ -3,7 +3,7 @@
 save_outs = False
 shot = 2
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+train_repeat_times = [25, 20, 15, 10, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -65,7 +65,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.1,
+        loc_filter_thr=0.01,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -121,7 +121,7 @@ test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
-    nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
+    nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
     # nms=dict(type='nms', iou_thr=0.3),
     max_per_img=100)
 # dataset settings

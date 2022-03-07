@@ -150,7 +150,7 @@ def show_emb_vectors_TSNE(outs, img=None, dim=2):
             plt.xticks([])
             plt.yticks([])
 
-def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
+def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None, is_show_text=True):
     emb_vectors_tuple = outs['emb_vectors']
     reps_tuple = outs['reps']
     reps_neg_tuple = outs['reps_neg']
@@ -175,7 +175,8 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     vectors = torch.cat([emb_vectors, reps, reps_neg], 0)
     # vectors = torch.cat([emb_vectors, reps], 0)
     vectors = vectors.numpy()
-    tsne = manifold.TSNE(n_components=2, init='pca', perplexity=20, n_iter=1000)
+    tsne = manifold.TSNE(n_components=3, init='pca', perplexity=20, n_iter=1000)
+    
     X_tsne = tsne.fit_transform(vectors)
     x_min, x_max = X_tsne.min(0), X_tsne.max(0)
     X_norm = (X_tsne - x_min) / (x_max - x_min)  # 归一化
@@ -204,27 +205,44 @@ def show_emb_vectors_TSNE_single(outs, scale_idx=-1, x_label=None, extra=None):
     mscatter(X_norm[:-num_cls*(num_modes_neg+1), 0], X_norm[:-num_cls*(num_modes_neg+1), 1], c=range(X_norm.shape[0] - num_cls*(num_modes_neg+1)), s=100, cmap='rainbow',
              m=ss)
 
-    for i in range(X_norm.shape[0] - num_cls * (num_modes_neg + 1)):
-        cls_pre_name = '' if cls_pre_score[i] <= score_thresh else CLASSES_VOC[cls_pre_idx[i]]
-        cls_pre_score_text = '' if cls_pre_score[i] < score_thresh else str(int(float(cls_pre_score[i]) * 100))
-        cls_pre_prob_ori_text = '' if probs_ori[i, cls_pre_idx[i]] < score_thresh else '|' + str(int(float(probs_ori[i, cls_pre_idx[i]]) * 100))
-        # cls_pre_score_text = ''
-        # show_text = cls_pre_name + cls_pre_score_text + cls_pre_prob_ori_text
-        show_text = cls_pre_name
-        plt.text(X_norm[i, 0], X_norm[i, 1], show_text, color='k',
-                 fontdict={'weight': 'bold', 'size': 20})
+    if is_show_text:
+        for i in range(X_norm.shape[0] - num_cls * (num_modes_neg + 1)):
+            cls_pre_name = '' if cls_pre_score[i] <= score_thresh else CLASSES_VOC[cls_pre_idx[i]]
+            cls_pre_score_text = '' if cls_pre_score[i] < score_thresh else str(int(float(cls_pre_score[i]) * 100))
+            cls_pre_prob_ori_text = '' if probs_ori[i, cls_pre_idx[i]] < score_thresh else '|' + str(int(float(probs_ori[i, cls_pre_idx[i]]) * 100))
+            # cls_pre_score_text = ''
+            # show_text = cls_pre_name + cls_pre_score_text + cls_pre_prob_ori_text
+            show_text = cls_pre_name
+            plt.text(X_norm[i, 0], X_norm[i, 1], show_text, color='k',
+                     fontdict={'weight': 'bold', 'size': 20})
     plt.plot(X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 0],
-             X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 1], 'g.')
-    plt.plot(X_norm[-num_cls * num_modes_neg:, 0], X_norm[-num_cls * num_modes_neg:, 1], 'r.')
-    for i in range(num_cls * num_modes_neg, num_cls * (num_modes_neg + 1)):
-        plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i - num_cls * num_modes_neg + 1)],
-                 color='deeppink',
-                 fontdict={'weight': 'bold', 'size': 20})
-    for i in range(0, num_cls * num_modes_neg):
-        plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i // num_modes_neg + 1)], color='blue',
-                 fontdict={'weight': 'bold', 'size': 20})
+             X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 1],
+             marker='.', color='deeppink', linestyle='', markersize=10)
+    plt.plot(X_norm[-num_cls * num_modes_neg:, 0], X_norm[-num_cls * num_modes_neg:, 1],
+             marker='.', color='blue', linestyle='', markersize=10)
+    if is_show_text:
+        for i in range(num_cls * num_modes_neg, num_cls * (num_modes_neg + 1)):
+            plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i - num_cls * num_modes_neg + 1)],
+                     color='deeppink',
+                     fontdict={'weight': 'bold', 'size': 20})
+        for i in range(0, num_cls * num_modes_neg):
+            plt.text(X_norm[-(i + 1), 0], X_norm[-(i + 1), 1], CLASSES_VOC[-(i // num_modes_neg + 1)],
+                     color='blue',
+                     fontdict={'weight': 'bold', 'size': 20})
     plt.xticks([])
     plt.yticks([])
+
+    plt.figure(3)
+    mscatter(X_norm[:-num_cls*(num_modes_neg+1), 0], X_norm[:-num_cls*(num_modes_neg+1), 1], c=range(X_norm.shape[0] - num_cls*(num_modes_neg+1)), s=100, cmap='rainbow',
+             m=ss)
+    plt.plot(X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 0],
+             X_norm[-num_cls * (num_modes_neg + 1):-num_cls * num_modes_neg, 1],
+             marker='.', color='deeppink', linestyle='', markersize=10)
+    plt.plot(X_norm[-num_cls * num_modes_neg:, 0], X_norm[-num_cls * num_modes_neg:, 1],
+             marker='.', color='blue', linestyle='', markersize=10)
+    plt.xticks([])
+    plt.yticks([])
+
     # plt.xlim(0, 1)
     # plt.ylim(0, 1)
     if x_label is not None:
@@ -412,7 +430,7 @@ def show_img_with_marks(img, outs, scale_idx):
     plt.xticks([])
     plt.yticks([])
 
-score_thresh = 0.2
+score_thresh = 0.3
 scan_img = False
 show_type = ['multi-img', 'multi-epoch', 'multi-scale', 'scan-image'][1]
 
@@ -469,7 +487,7 @@ if __name__ == '__main__':
             plt.figure(1)
             show_img_with_marks(img, outs, scale_idx)
             plt.figure(2)
-            show_emb_vectors_TSNE_single(outs, scale_idx)
+            show_emb_vectors_TSNE_single(outs, scale_idx, is_show_text=True)
             plt.show()
     exit()
 

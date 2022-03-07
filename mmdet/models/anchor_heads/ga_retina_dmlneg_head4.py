@@ -51,16 +51,9 @@ class DMLNegHead(nn.Module):
         self.neg_representations = nn.Parameter(
             torch.FloatTensor(self.output_channels, self.neg_num_modes, self.emb_channels[-1]),
             requires_grad=False)
-        # self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
 
         normal_init(self.rep_fc, std=0.01)
         normal_init(self.neg_rep_fc, std=0.01)
-        # constant_init(self.neg_offset_fc, 0)
-
-        # if freeze:
-        #     for c in [self.neg_offset_fc]:
-        #         for p in c.parameters():
-        #             p.requires_grad = False
 
     def forward(self, x, save_outs=False):
         emb_vectors = self.emb_module(x)
@@ -82,10 +75,6 @@ class DMLNegHead(nn.Module):
         else:
             reps_neg = self.neg_representations.detach()
 
-        # neg_offset = self.neg_offset_fc(reps.squeeze(1)).view(reps.size(0), self.neg_num_modes, reps.size(-1))
-        # reps_neg = neg_offset + reps.expand_as(neg_offset)
-        # reps_neg = F.normalize(reps_neg, p=2, dim=2)
-
         distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
         distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
         distances = torch.sqrt(((distances - reps)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
@@ -106,14 +95,6 @@ class DMLNegHead(nn.Module):
             cls_score = probs_sumj / probs_sumij
         else:
             cls_score = probs.max(dim=2)[0]
-
-        # probs_bg = torch.sub(1, probs.max(1)[0].max(1, keepdim=True)[0])
-        # if self.training:
-        #     probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
-        # else:
-        #     probs_bg = torch.zeros(probs_fg.shape[0], 1, probs_fg.shape[2], probs_fg.shape[3]).to(probs_fg.device)
-
-        # cls_score = torch.cat((probs_bg, probs_fg), 1)
 
         if save_outs:
             return cls_score, cls_score_neg, distances, distances_neg, probs_ori, emb_vectors, reps, reps_neg

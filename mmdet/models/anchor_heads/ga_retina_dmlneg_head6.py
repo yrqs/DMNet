@@ -213,6 +213,10 @@ class GARetinaDMLNegHead6(GuidedAnchorHead):
                 for p in c.parameters():
                     p.requires_grad = False
 
+        for c in [self.feature_adaption_cls]:
+            for p in c.parameters():
+                p.requires_grad = False
+
     def _init_layers(self):
         self.relu = nn.ReLU(inplace=True)
 

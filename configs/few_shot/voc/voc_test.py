@@ -5,8 +5,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Expand'),
-    dict(type='MinIoURandomCrop'),
+    # dict(type='Expand'),
+    # dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     # dict(type='Normalize', **img_norm_cfg),
@@ -38,11 +38,17 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
-            ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
-            ],
-            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            # ann_file='mytest/test_3shot.txt',
+            # img_prefix=data_root + 'VOC2007/',
+            # ann_file=data_root + 'VOC2007/ImageSets/Main/bottle_test_diy.txt',
+            # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+            ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+            img_prefix=data_root + 'VOC2007/',
+            # ann_file=[
+            #     data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
+            #     data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
+            # ],
+            # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
@@ -59,8 +65,11 @@ data = dict(
         # ann_file='mytest/test_1img.txt',
         # ann_file='mytest/test_1img_bird.txt',
         # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+        # ann_file='mytest/test_3shot.txt',
         ann_file='mytest/test_3shot.txt',
         img_prefix=data_root + 'VOC2007/',
+        # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        # img_prefix=data_root + 'VOC2007/',
         # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
         # img_prefix='mytest/VOC2007',
         pipeline=test_pipeline))

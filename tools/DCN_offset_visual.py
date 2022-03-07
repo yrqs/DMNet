@@ -122,8 +122,8 @@ def show_offset_center(offsets, step, level, group=0):
     plt.axis('off')
     plt.show()
 
-# show_list = [43, 44, 46, 47, ]
-show_list = [6, 8, 9, 17, 42, 43, 44, 46, 47, ]
+show_list = [43, 44, 46, 47, ]
+# show_list = [6, 8, 9, 17, 42, 43, 44, 46, 47, ]
 # show_list = [13, 16, 18, 32, 34, 38, 43, 44, 46, 47, ]
 not_show_list = []
 
@@ -132,9 +132,9 @@ filter_not_show = False
 
 stride = [8, 16, 32, 64, 128]
 
-group_list = (0, 1, 2, 3)
-# group = (0, )
-# group = (2, )
+# group_list = (0, 1, 2, 3)
+group_list = (0, )
+# group_list = (2, )
 
 if __name__ == '__main__':
 

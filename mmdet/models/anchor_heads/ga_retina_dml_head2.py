@@ -15,6 +15,8 @@ from ..builder import build_loss
 from ..losses import FocalLoss
 import os
 
+from mmdet.utils.show_feature import show_feature
+
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
@@ -217,6 +219,8 @@ class GARetinaDMLHead2(GuidedAnchorHead):
         else:
             feat_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
             feat_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
+
+        show_feature(loc_pred, (0, 1))
 
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr

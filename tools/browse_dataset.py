@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument(
         '--show-interval',
         type=int,
-        default=999,
+        default=0,
         help='the interval of show (ms)')
     args = parser.parse_args()
     return args
@@ -122,7 +122,41 @@ def main1():
             out_file=filename,
             wait_time=args.show_interval)
         # progress_bar.update()
+        # print(item['gt_labels'] - 1)
+        # print(item['filename'])
+
+CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
+           'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
+           'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+           'tvmonitor')
+
+novel_sets = [['bird', 'bus', 'cow', 'motorbike', 'sofa'],
+              ['aeroplane', 'bottle', 'cow', 'horse', 'sofa'],
+              ['boat', 'cat', 'motorbike', 'sheep', 'sofa'],
+              ['bottle', ]]
+
+
+def select_novel(novel_id):
+    # novel_id = novel_id-1
+    args = parse_args()
+    cfg = retrieve_data_cfg(args.config, args.skip_type)
+    print(cfg)
+    dataset = build_dataset(cfg.data.train)
+    novel_class_id = [CLASSES.index(c) for c in novel_sets[novel_id-1]]
+    with open('mytest/novel_split%d_test.txt' % novel_id, 'w+') as f:
+        for i in tqdm.tqdm(range(len(dataset))):
+            item = dataset[i]
+            filename = os.path.join(args.output_dir,
+                                    Path(item['filename']).name
+                                    ) if args.output_dir is not None else None
+            for gt_l in (item['gt_labels'] -1):
+                if gt_l in novel_class_id:
+                    filename = item['filename'].split('/')[-1].split('.')[0]
+                    f.write(filename)
+                    f.write('\n')
+                    break
 
 
 if __name__ == '__main__':
-    main1()
+    # main1()
+    select_novel(1)

@@ -3,7 +3,7 @@
 save_outs = False
 shot = 3
 shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+train_repeat_times = [25, 20, 15, 10, 10][shot_idx]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -15,12 +15,12 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
+warmup_iters = 1000
 lr_step = [12, 16, 18]
 interval = 2
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',

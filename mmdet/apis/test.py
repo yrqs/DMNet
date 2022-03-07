@@ -8,6 +8,8 @@ import torch
 import torch.distributed as dist
 from mmcv.runner import get_dist_info
 
+# idx_list = [20, 38, 42, 43]
+idx_list = None
 
 def single_gpu_test(model, data_loader, show=False):
     model.eval()
@@ -20,7 +22,8 @@ def single_gpu_test(model, data_loader, show=False):
         results.append(result)
 
         if show:
-            model.module.show_result(data, result, score_thr=0.1)
+            if idx_list is None or i in idx_list:
+                model.module.show_result(data, result, score_thr=0.25, idx=i)
 
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):

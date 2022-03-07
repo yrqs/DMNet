@@ -9,6 +9,8 @@ import math
 
 @weighted_loss
 def repmet_loss(distance, label, alpha):
+    # distance: (n, num_class, num_mode)
+    # label: (n, 1)
     if label.size(0) == 0:
         loss = torch.tensor(0.0).to(label.device)
     else:
@@ -17,26 +19,9 @@ def repmet_loss(distance, label, alpha):
         cls_other_idx = torch.ones(distance.size(0), distance.size(1)).to(label_.device).scatter(1, label_, 0).byte()
         dis_cls_gt = distance[cls_gt_idx].view(distance.size(0), -1, distance.size(2))
         dis_cls_other = distance[cls_other_idx].view(distance.size(0), -1, distance.size(2))
-        num_cls_other = dis_cls_other.size(1)
-        # print(dis_cls_gt.size())
-        # print(dis_cls_other.size())
         dis_cls_gt_min = dis_cls_gt.min(1)[0].min(1)[0]
         dis_cls_other_min = dis_cls_other.min(1)[0].min(1)[0]
-        # print('dis_cls_gt_min: ', dis_cls_gt_min)
-        # print('dis_cls_other_min: ', dis_cls_other_min)
-
-        # dis_cls_gt_min = dis_cls_gt.min(1)[0].sum(1)
-        # dis_cls_other_min = dis_cls_other.min(1)[0].sum(1)
-        sigma = 0.5
-        addition = (dis_cls_other_min+dis_cls_gt_min)
-        # print((dis_cls_other_min-dis_cls_gt_min).mean())
-        # beta = (dis_cls_other_min-dis_cls_gt_min) * addition / (2.0*sigma**2*math.log(0.7/0.3*num_cls_other))
-        # _alpha = (1-beta)*(2.0*sigma**2*math.log(1.0*num_cls_other))/addition + (dis_cls_other_min-dis_cls_gt_min)
-        # _alpha = (1-beta)*alpha + (dis_cls_other_min-dis_cls_gt_min)
         loss = F.relu(dis_cls_gt_min - dis_cls_other_min + alpha)
-        # print('a:', _alpha.size())
-        # print('l:', loss.size())
-        # loss = loss.sum()
     return loss
 
 

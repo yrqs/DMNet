@@ -41,12 +41,29 @@ def build_optimizer(model, optimizer_cfg):
     """
     if hasattr(model, 'module'):
         model = model.module
-
     optimizer_cfg = optimizer_cfg.copy()
+    transfer_options = optimizer_cfg.pop('transfer_options', None)
     paramwise_options = optimizer_cfg.pop('paramwise_options', None)
     # if no paramwise option is specified, just use the global setting
     if paramwise_options is None:
-        params = model.parameters()
+        if transfer_options is None:
+            params = model.parameters()
+        else:
+            assert isinstance(transfer_options, dict)
+            base_lr = optimizer_cfg['lr']
+            scale_dict = transfer_options['scale_dict']
+            for key in scale_dict.keys():
+                print(key, ': ', scale_dict[key])
+            params = []
+            for name, param in model.named_parameters():
+                param_group = {'params': [param]}
+                if not param.requires_grad:
+                    params.append(param_group)
+                    continue
+                component_type = name.split('.')[0]
+                if component_type in scale_dict.keys():
+                    param_group['lr'] = base_lr * scale_dict[component_type]
+                params.append(param_group)
     else:
         assert isinstance(paramwise_options, dict)
         # get base lr and weight decay

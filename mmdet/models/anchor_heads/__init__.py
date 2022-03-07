@@ -45,7 +45,7 @@ from .ga_retina_dml_head7D import GARetinaDMLHead7D
 from .ga_retinaaug_dml_head3 import GARetinaAugDMLHead3
 from .ga_retinaaug_dml_head3D import GARetinaAugDMLHead3D
 from .ga_retina_dml_head10D import GARetinaDMLHead10D
-from .ga_retina_dml_head12D import GARetinaDMLHead12D
+from .ga_retina_dml_head12 import GARetinaDMLHead12
 from .ga_retina_dml_head13D import GARetinaDMLHead13D
 from .ga_retina_dml_head14D import GARetinaDMLHead14D
 from .ga_retina_dml_head15D import GARetinaDMLHead15D
@@ -71,6 +71,26 @@ from .ga_retina_dmlneg_head5 import GARetinaDMLNegHead5
 from .ga_retina_dmlneg_head6 import GARetinaDMLNegHead6
 from .ga_retina_dmlneg_head7 import GARetinaDMLNegHead7
 from .ga_retina_head2 import GARetinaHead2
+from .ga_retina_dml_force_head1 import GARetinaDMLForceHead1
+from .ga_retina_dml_force_head2 import GARetinaDMLForceHead2
+from .ga_retina_dml_force_head3 import GARetinaDMLForceHead3
+from .ga_retina_dml_force_head4 import GARetinaDMLForceHead4
+from .fcos_dml_head import FCOSDMLHead
+from .fcos_dml_head2 import FCOSDMLHead2
+from .fcos_dml_head3 import FCOSDMLHead3
+from .fcos_dmlneg_head import FCOSDMLNegHead
+from .fcos_dmlneg_head2 import FCOSDMLNegHead2
+from .retina_dml_head3 import RetinaDMLHead3
+from .retina_dml_head4 import RetinaDMLHead4
+from .retina_dml_head5 import RetinaDMLHead5
+from .retina_dmlneg_head4 import RetinaDMLNegHead4
+from .retina_dmlneg_head3 import RetinaDMLNegHead3
+from .retina_dmlneg_head5 import RetinaDMLNegHead5
+from .atss_dml_head import ATSSDMLHead
+from .retina_dml_head6 import RetinaDMLHead6
+from .retina_dmlneg_head6 import RetinaDMLNegHead6
+from .retina_dml_head7 import RetinaDMLHead7
+from .retina_dml_head8 import RetinaDMLHead8
 
 __all__ = [
     'AnchorHead', 'GuidedAnchorHead', 'FeatureAdaption', 'RPNHead',
@@ -83,12 +103,16 @@ __all__ = [
     'RetinaDMLHead2', 'GARetinaDMLHead3', 'GARetinaDMLHead2D', 'GARetinaDMLHead4',
     'GARetinaDMLHead5', 'GARetinaDMLHead6', 'GARetinaDMLHead7', 'GARetinaDMLHead8',
     'GARetinaDMLHead3D', 'GARetinaDMLHead9', 'GARetinaDMLHead10', 'GARetinaDMLHead11',
-    'GARetinaDMLHead5D', 'GARetinaAugDMLHead3', 'GARetinaAugDMLHead3D', 'GARetinaDMLHead12D',
+    'GARetinaDMLHead5D', 'GARetinaAugDMLHead3', 'GARetinaAugDMLHead3D', 'GARetinaDMLHead12',
     'GARetinaDMLHead13D', 'GARetinaDMLHead14D', 'GARetinaDMLHead15D', 'GARetinaDMLHead16D',
     'GARetinaDMLHead17D', 'GARetinaDMLHead10D', 'GARetinaDMLHead7D', 'GARetinaDMLHead18',
     'GARetinaDMLHead19', 'GARetinaDMLHead18D', 'GARetinaDMLHead20', 'GARetinaDMLHead20D',
     'GARetinaDMLHead21', 'GARetinaDMLHead22', 'GARetinaDMLHead23', 'GARetinaDMLHead22D',
     'GARetinaDMLHead24', 'GARetinaDMLHead24D', 'GARetinaDMLHead25', 'GARetinaDMLHead15',
     'RetinaDRTHead', 'GARetinaDMLNegHead3', 'GARetinaDMLNegHead4', 'GARetinaDMLNegHead5',
-    'GARetinaDMLNegHead6', 'GARetinaDMLNegHead7', 'GARetinaHead2'
+    'GARetinaDMLNegHead6', 'GARetinaDMLNegHead7', 'GARetinaHead2', 'GARetinaDMLForceHead1',
+    'GARetinaDMLForceHead2', 'GARetinaDMLForceHead3', 'GARetinaDMLForceHead4', 'FCOSDMLHead',
+    'FCOSDMLNegHead', 'FCOSDMLNegHead2', 'FCOSDMLHead2', 'FCOSDMLHead3', 'RetinaDMLHead3',
+    'RetinaDMLHead4', 'RetinaDMLHead5', 'RetinaDMLNegHead4', 'RetinaDMLNegHead3', 'RetinaDMLNegHead5',
+    'ATSSDMLHead', 'RetinaDMLHead6', 'RetinaDMLNegHead6', 'RetinaDMLHead7', 'RetinaDMLHead8'
 ]

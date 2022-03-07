@@ -64,8 +64,7 @@ class FPN(nn.Module):
                  norm_cfg=None,
                  act_cfg=None,
                  save_outs=False,
-                 freeze=False,
-                 freeze_ratio=10):
+                 freeze=False):
         super(FPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels

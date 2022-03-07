@@ -74,20 +74,30 @@ class DMLNegHead(nn.Module):
         reps_neg = neg_offset + reps.expand_as(neg_offset)
         reps_neg = F.normalize(reps_neg, p=2, dim=2)
 
-        distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
-        distances = torch.sqrt(((distances - reps)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
+        if self.training and self.output_channels > 20:
+            reps_list = reps.split(20, dim=0)
+            distance_list = []
+            for r in reps_list:
+                dis = self.calculate_distance(r, emb_vectors)
+                distance_list.append(dis)
+            distance = torch.cat(distance_list, dim=1)
 
-        distances_neg = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances_neg = distances_neg.expand(-1, -1, -1, self.output_channels, self.neg_num_modes, -1)
-        distances_neg = torch.sqrt(((distances_neg - reps_neg)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
+            reps_neg_list = reps_neg.split(20, dim=0)
+            distance_neg_list = []
+            for rn in reps_neg_list:
+                dis = self.calculate_distance(rn, emb_vectors)
+                distance_neg_list.append(dis)
+            distance_neg = torch.cat(distance_neg_list, dim=1)
+        else:
+            distance = self.calculate_distance(reps, emb_vectors)
+            distance_neg = self.calculate_distance(reps_neg, emb_vectors)
 
-        probs_neg = torch.exp(-distances_neg**2/(2.0*self.sigma**2))
+        probs_neg = torch.exp(-distance_neg**2/(2.0*self.sigma**2))
         cls_score_neg = probs_neg.max(dim=2)[0]
 
-        probs_ori = torch.exp(-(distances)**2/(2.0*self.sigma**2))
+        probs_ori = torch.exp(-(distance)**2/(2.0*self.sigma**2))
         probs_ori = probs_ori.max(dim=2)[0]
-        probs = torch.exp(-(distances+self.beta*(F.relu(self.neg_scope-distances_neg.min(dim=2, keepdim=True)[0])))**2/(2.0*self.sigma**2))
+        probs = torch.exp(-(distance+self.beta*(F.relu(-distance_neg.min(dim=2, keepdim=True)[0])+self.neg_scope))**2/(2.0*self.sigma**2))
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
@@ -95,17 +105,15 @@ class DMLNegHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        # probs_bg = torch.sub(1, probs.max(1)[0].max(1, keepdim=True)[0])
-        # if self.training:
-        #     probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
-        # else:
-        #     probs_bg = torch.zeros(probs_fg.shape[0], 1, probs_fg.shape[2], probs_fg.shape[3]).to(probs_fg.device)
-
-        # cls_score = torch.cat((probs_bg, probs_fg), 1)
-
         if save_outs:
-            return cls_score, cls_score_neg, distances, distances_neg, probs_ori, emb_vectors, reps, reps_neg
-        return cls_score, cls_score_neg, distances, distances_neg, probs_ori
+            return cls_score, cls_score_neg, distance, distance_neg, probs_ori, emb_vectors, reps, reps_neg
+        return cls_score, cls_score_neg, distance, distance_neg, probs_ori
+
+    def calculate_distance(self, reps, emb_vectors):
+        reps_ex = reps[None, :, :, :, None, None].expand(emb_vectors.size(0), -1, -1, -1, emb_vectors.size(2), emb_vectors.size(3))
+        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand_as(reps_ex)
+        distance = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
+        return distance
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
     emb_list = []
@@ -395,7 +403,6 @@ class GARetinaDMLNegHead3(GuidedAnchorHead):
         # get squares and guided anchors
         squares_list, guided_anchors_list, _ = self.get_anchors(
             featmap_sizes, shape_preds, loc_preds, img_metas, device=device)
-        print(squares_list)
         # get shape targets
         sampling = False if not hasattr(cfg, 'ga_sampler') else True
         shape_targets = ga_shape_target(
