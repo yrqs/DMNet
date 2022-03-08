@@ -30,7 +30,7 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'),
     neck=dict(
@@ -201,6 +201,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/wo_freeze_stage/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

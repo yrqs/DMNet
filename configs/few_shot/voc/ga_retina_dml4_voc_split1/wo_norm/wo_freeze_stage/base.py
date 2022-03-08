@@ -1,5 +1,3 @@
-import os
-
 # model settings
 save_outs = False
 shot = 1
@@ -18,8 +16,8 @@ alpha = 0.15
 warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
-lr_base = 0.0001
-imgs_per_gpu = 2
+lr_base = 0.00025
+imgs_per_gpu = 3
 gpu_num = 4
 
 model = dict(
@@ -30,7 +28,7 @@ model = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'),
     neck=dict(
@@ -125,8 +123,8 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Expand'),
-    dict(type='MinIoURandomCrop'),
+    # dict(type='Expand'),
+    # dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -150,29 +148,39 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    imgs_per_gpu=imgs_per_gpu,
+    imgs_per_gpu=2,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=train_repeat_times,
+        times=1,
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+            # img_prefix=data_root + 'VOC2007/',
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-        # ann_file=data_root + 'VOC2007/ImageSets/Main/novel_split2_test.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        # ann_file=[
+        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
+        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
+        # ],
+        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+        # ann_file='mytest/test_1img.txt',
+        # ann_file='mytest/test_1img_bird.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
         img_prefix=data_root + 'VOC2007/',
+        # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
+        # img_prefix='mytest/VOC2007',
         pipeline=test_pipeline))
 
 evaluation = dict(interval=interval, metric='mAP')
@@ -201,6 +209,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]
