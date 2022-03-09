@@ -130,6 +130,7 @@ class GARetinaDMLHead13(GuidedAnchorHead):
                      num_modes=1,
                      sigma=0.5,
                      cls_norm=False,
+                     cls_score_type='type1',
                  ),
                  save_outs=False,
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
