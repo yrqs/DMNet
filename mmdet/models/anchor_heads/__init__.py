@@ -46,8 +46,8 @@ from .ga_retinaaug_dml_head3 import GARetinaAugDMLHead3
 from .ga_retinaaug_dml_head3D import GARetinaAugDMLHead3D
 from .ga_retina_dml_head10D import GARetinaDMLHead10D
 from .ga_retina_dml_head12 import GARetinaDMLHead12
-from .ga_retina_dml_head13D import GARetinaDMLHead13D
-from .ga_retina_dml_head14D import GARetinaDMLHead14D
+from .ga_retina_dml_head13 import GARetinaDMLHead13
+from .ga_retina_dml_head14 import GARetinaDMLHead14
 from .ga_retina_dml_head15D import GARetinaDMLHead15D
 from .ga_retina_dml_head16D import GARetinaDMLHead16D
 from .ga_retina_dml_head17D import GARetinaDMLHead17D
@@ -104,7 +104,7 @@ __all__ = [
     'GARetinaDMLHead5', 'GARetinaDMLHead6', 'GARetinaDMLHead7', 'GARetinaDMLHead8',
     'GARetinaDMLHead3D', 'GARetinaDMLHead9', 'GARetinaDMLHead10', 'GARetinaDMLHead11',
     'GARetinaDMLHead5D', 'GARetinaAugDMLHead3', 'GARetinaAugDMLHead3D', 'GARetinaDMLHead12',
-    'GARetinaDMLHead13D', 'GARetinaDMLHead14D', 'GARetinaDMLHead15D', 'GARetinaDMLHead16D',
+    'GARetinaDMLHead13', 'GARetinaDMLHead14', 'GARetinaDMLHead15D', 'GARetinaDMLHead16D',
     'GARetinaDMLHead17D', 'GARetinaDMLHead10D', 'GARetinaDMLHead7D', 'GARetinaDMLHead18',
     'GARetinaDMLHead19', 'GARetinaDMLHead18D', 'GARetinaDMLHead20', 'GARetinaDMLHead20D',
     'GARetinaDMLHead21', 'GARetinaDMLHead22', 'GARetinaDMLHead23', 'GARetinaDMLHead22D',

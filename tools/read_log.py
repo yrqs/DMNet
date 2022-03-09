@@ -45,7 +45,7 @@ def get_highest_voc_mAP(log_path):
 
 def summury_voc_finetune(dir_base):
     results = dict()
-    for sub_dir in sub_dirs[dataset]:
+    for sub_dir in sub_dirs[dataset][1:]:
         work_dir = os.path.join(dir_base, sub_dir)
         files = os.listdir(work_dir)
         log_path = None

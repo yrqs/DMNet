@@ -20,7 +20,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -191,7 +191,7 @@ lr_config = dict(
     warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
     step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+checkpoint_config = dict(interval=lr_step[2])
 # yapf:disable
 log_config = dict(
     interval=50,

@@ -15,10 +15,10 @@ alpha = 0.15
 
 warmup_iters = 500
 lr_step = [10, 14, 16]
-interval = 4
+interval = 16
 lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -156,8 +156,8 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split2_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split2_base.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
@@ -165,7 +165,7 @@ data = dict(
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
@@ -177,7 +177,7 @@ data = dict(
         # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         # ann_file='mytest/test_1img.txt',
         # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split2_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
         img_prefix=data_root + 'VOC2007/',
         # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
         # img_prefix='mytest/VOC2007',

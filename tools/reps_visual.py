@@ -41,6 +41,7 @@ novel_sets = [['bird', 'bus', 'cow', 'motorbike', 'sofa'],
 # checkpoint_file = 'work_dirs/ga_retina_dml9_voc_split2/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml11_voc_split2/wo_norm/256_256/base/epoch_16.pth'
 checkpoint_file = 'work_dirs/ga_retina_dml6_voc_split2/wo_norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/10shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/base/epoch_20.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/30shot/epoch_20.pth'
 
@@ -168,6 +169,22 @@ def show_dis_between_reps(reps):
     plt.xticks(rotation=270)
     plt.show()
 
+def show_dim_dis_between_reps(reps, cls_id):
+    reps = reps.reshape(-1, reps.size(-1))
+    rep1 = reps[cls_id, :].expand_as(reps)
+    dis_vector = ((rep1-reps)**2)
+
+    num_cls = reps.shape[0]
+    scale_ls = range(num_cls)
+    label_ls = list(CLASSES)
+
+    fig = plt.figure()
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=0.2)
+    plt.imshow(dis_vector, cmap='rainbow', norm=norm)
+    plt.colorbar()
+    plt.yticks(scale_ls, label_ls)
+    plt.show()
+
 def show_reps(reps, novel_idx=1):
     novel_cls_ids = [CLASSES.index(cls_name) for cls_name in novel_sets[novel_idx-1]]
     base_cls_ids = list(set(range(len(CLASSES))) - set(novel_cls_ids))
@@ -193,9 +210,28 @@ def show_emb_vectors():
     emb_rep = torch.cat([emb_vectors, reps], dim=0)
     reps_visual(emb_rep, dim=3)
 
+def show_dim_dis_sum(reps):
+    num_cls = reps.shape[0]
+    scale_ls = range(num_cls)
+    label_ls = list(CLASSES)
+
+    reps = reps.reshape(-1, reps.size(-1))
+    reps_exp1 = reps.unsqueeze(0).expand(num_cls, -1, -1)
+    reps_exp2 = reps.unsqueeze(1).expand(-1, num_cls, -1)
+    dis_mat = ((reps_exp1-reps_exp2)**2).mean(dim=1)
+
+    fig = plt.figure()
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=0.1)
+    plt.imshow(dis_mat, cmap='rainbow', norm=norm)
+    plt.colorbar()
+    plt.yticks(scale_ls, label_ls)
+    plt.show()
+
 if __name__ == '__main__':
     # show_dis_between_reps(reps)
     # show_reps(reps, 2)
     # reps_visual(reps)
     # show_emb_vectors()
-    show_dis_between_reps(reps)
+    # show_dis_between_reps(reps)
+    show_dim_dis_between_reps(reps, CLASSES_VOC.index('sheep'))
+    # show_dim_dis_sum(reps)
