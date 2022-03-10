@@ -1,10 +1,6 @@
 # model settings
+
 save_outs = False
-shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
-freeze = False
-freeze1 = False
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
@@ -12,13 +8,7 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-
-warmup_iters = 500
-lr_step = [10, 14, 16]
-interval = 16
-lr_base = 0.00025
-imgs_per_gpu = 2
-gpu_num = 4
+neg_alpha = 0.1
 
 model = dict(
     type='RetinaNet',
@@ -40,16 +30,22 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead14',
+        type='GARetinaDMLNegHead4',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        feat_channels=256,
+        neg_sample_thresh=0.2,
+        pos_sub_neg_thresh=0.4,
+        alpha_hn=0.1,
+        neg_hn_ratio=3,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=False,
+            beta=0.3,
+            neg_num_modes=2),
+        feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -59,7 +55,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.01,
+        loc_filter_thr=0.1,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -75,7 +71,8 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+    ))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -115,13 +112,12 @@ test_cfg = dict(
     # nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
-# dataset settings
 dataset_type = 'VOCDataset'
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
     # dict(type='Expand'),
     # dict(type='MinIoURandomCrop'),
@@ -147,6 +143,7 @@ test_pipeline = [
             dict(type='Collect', keys=['img']),
         ])
 ]
+
 data = dict(
     imgs_per_gpu=2,
     workers_per_gpu=2,
@@ -186,16 +183,16 @@ data = dict(
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*2*4, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=warmup_iters,
+    warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+    step=[10, 14])
+checkpoint_config = dict(interval=16)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -205,10 +202,11 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = lr_step[2]
+total_epochs = 16
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
+# resume_from = 'work_dirs/ga_retina_dml3_s2_fpn_256_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_8.pth'
 resume_from = None
 workflow = [('train', 1)]

@@ -11,14 +11,14 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (128, 256)][1]
 stacked_convs = 2
 
-alpha = 0.15
-
 warmup_iters = 500
 lr_step = [10, 14, 16]
-interval = 16
+interval = 4
 lr_base = 0.00025
-imgs_per_gpu = 2
-gpu_num = 4
+imgs_per_gpu = 4
+gpu_num = 8
+
+alpha = 0.3
 
 model = dict(
     type='RetinaNet',
@@ -40,7 +40,7 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead14',
+        type='GARetinaDMLHead4',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
@@ -48,7 +48,7 @@ model = dict(
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
-            sigma=0.5,
+            sigma=0.25,
             cls_norm=False),
         octave_base_scale=4,
         scales_per_octave=3,
@@ -148,7 +148,7 @@ test_pipeline = [
         ])
 ]
 data = dict(
-    imgs_per_gpu=2,
+    imgs_per_gpu=imgs_per_gpu,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',

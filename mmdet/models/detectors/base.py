@@ -186,8 +186,8 @@ def imshow_det_bboxes(img,
                 img, left_top, right_bottom, bbox_color, thickness=thickness)
             label_text = class_names[
                 label] if class_names is not None else 'cls {}'.format(label)
-            # if len(bbox) > 4:
-            #     label_text += '|{:.02f}'.format(bbox[-1])
+            if len(bbox) > 4:
+                label_text += '|{:.02f}'.format(bbox[-1])
             cv2.putText(img, label_text, (bbox_int[0], bbox_int[1] - 2),
                         cv2.FONT_HERSHEY_COMPLEX, font_scale, text_color, thickness=font_thickness)
 
@@ -385,11 +385,11 @@ class BaseDetector(nn.Module, metaclass=ABCMeta):
                 labels,
                 class_names=class_names,
                 score_thr=score_thr,
-                # bbox_color=(72, 101, 241),
-                # text_color=(72, 101, 241),
-                bbox_color=(0, 255, 0),
-                text_color=(0, 255, 0),
-                thickness=10,
-                font_thickness=6,
-                font_scale=3,
+                bbox_color=(72, 101, 241),
+                text_color=(72, 101, 241),
+                # bbox_color=(0, 255, 0),
+                # text_color=(0, 255, 0),
+                thickness=2,
+                font_thickness=2,
+                font_scale=1,
                 idx=idx)

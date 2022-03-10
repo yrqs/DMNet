@@ -24,6 +24,9 @@ def inverse_sigmoid(x, eps=1e-5):
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1/x2)
 
+def scale_tensor_gard(t, grad_scale):
+    return (1-grad_scale) * t.detach() + grad_scale * t
+
 class DMLHead(nn.Module):
     def __init__(self,
                  emb_module,
@@ -54,7 +57,7 @@ class DMLHead(nn.Module):
                 for p in c.parameters():
                     p.requires_grad = False
 
-    def forward(self, x, save_outs=False):
+    def forward(self, x, grad_scale=None, save_outs=False):
         emb_vectors = self.emb_module(x)
         emb_vectors = F.normalize(emb_vectors, p=2, dim=1)
 
@@ -65,7 +68,6 @@ class DMLHead(nn.Module):
             self.representations.data = reps.detach()
         else:
             reps = self.representations.detach()
-
         
         distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
         distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
@@ -114,6 +116,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  stacked_convs=4,
+                 grad_scale=None,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
@@ -127,6 +130,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
+        self.grad_scale=grad_scale
         super(GARetinaDMLHead4, self).__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs
@@ -198,6 +202,10 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         cls_feat = x
         reg_feat = x
 
+        if self.training and (self.grad_scale is not None):
+            reg_feat = scale_tensor_gard(reg_feat, self.grad_scale)
+            cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)
+
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
@@ -216,7 +224,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance = self.cls_head(cls_feat_adp)
+        cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:

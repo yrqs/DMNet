@@ -43,7 +43,7 @@ class DMLHead(nn.Module):
         self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.representations = nn.Parameter(
-            torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
+            torch.FloatTensor(self.output_channels, self.emb_channels[-1]),
             requires_grad=False)
 
         self.self_attn = nn.MultiheadAttention(self.emb_channels[-1], nhead, dropout=dropout)
@@ -84,10 +84,10 @@ class DMLHead(nn.Module):
         reps_att_ex = reps_att[None, :, :, :, None, None].expand(n, -1, -1, -1, w, h)
         reps_norm_ex = reps_norm[None, :, :, :, None, None].expand_as(reps_att_ex)
         emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand_as(reps_att_ex)
-        emb_vectors_ex = emb_vectors_ex * reps_att_ex.sigmoid()
+        # emb_vectors_ex = emb_vectors_ex * reps_att_ex.sigmoid()
 
         emb_vectors_norm = F.normalize(emb_vectors_ex, p=2, dim=3)
-        distances = torch.sqrt(((emb_vectors_norm - reps_norm_ex) ** 2).sum(3))
+        distances = torch.sqrt((((emb_vectors_norm - reps_norm_ex) ** 2) * reps_att_ex.sigmoid()).sum(3))
 
         probs_ori = torch.exp(-(distances) ** 2 / (2.0 * self.sigma ** 2))
         probs_ori = probs_ori.max(dim=2)[0]
