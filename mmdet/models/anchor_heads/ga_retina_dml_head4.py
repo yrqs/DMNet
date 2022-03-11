@@ -202,10 +202,6 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         cls_feat = x
         reg_feat = x
 
-        if self.training and (self.grad_scale is not None):
-            reg_feat = scale_tensor_gard(reg_feat, self.grad_scale)
-            cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)
-
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
@@ -216,6 +212,10 @@ class GARetinaDMLHead4(GuidedAnchorHead):
 
         cls_feat_adp = self.feature_adaption_cls(cls_feat, shape_pred)
         reg_feat_adp = self.feature_adaption_reg(reg_feat, shape_pred)
+
+        if self.training and (self.grad_scale is not None):
+            cls_feat_adp = scale_tensor_gard(cls_feat_adp, self.grad_scale)
+            reg_feat_adp = scale_tensor_gard(reg_feat_adp, self.grad_scale)
 
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr

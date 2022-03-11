@@ -15,12 +15,12 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 200
+warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 8
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -42,17 +42,16 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead4',
+        type='GARetinaDMLHead15',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
         feat_channels=256,
-        grad_scale=0.1,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=True),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -65,12 +64,13 @@ model = dict(
         loc_filter_thr=0.01,
         save_outs=save_outs,
         loss_loc=dict(
-            type='FocalLoss',
+            type='VarifocalLoss',
             use_sigmoid=True,
+            alpha=0.75,
             gamma=2.0,
-            alpha=0.25,
-            loss_weight=0.0),
-        loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=0.0),
+            iou_weighted=True,
+            loss_weight=1.0),
+        loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -202,6 +202,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml15_voc_split1/norm/base_aug/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

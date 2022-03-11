@@ -28,9 +28,8 @@ class DMLNegHead(nn.Module):
                  emb_channels,
                  num_modes, sigma,
                  cls_norm,
-                 neg_scope=2.0,
                  beta=0.3,
-                 neg_num_modes=3,
+                 neg_num_modes=2,
                  freeze=False):
         assert num_modes==1
         super().__init__()
@@ -43,7 +42,6 @@ class DMLNegHead(nn.Module):
         self.cls_norm = cls_norm
         self.beta = beta
         self.neg_num_modes = neg_num_modes
-        self.neg_scope = neg_scope
         self.representations = nn.Parameter(
             torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
@@ -74,20 +72,30 @@ class DMLNegHead(nn.Module):
         reps_neg = neg_offset + reps.expand_as(neg_offset)
         reps_neg = F.normalize(reps_neg, p=2, dim=2)
 
-        distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
-        distances = torch.sqrt(((distances - reps)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
+        if self.training and self.output_channels > 20:
+            reps_list = reps.split(20, dim=0)
+            distance_list = []
+            for r in reps_list:
+                dis = self.calculate_distance(r, emb_vectors)
+                distance_list.append(dis)
+            distance = torch.cat(distance_list, dim=1)
 
-        distances_neg = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances_neg = distances_neg.expand(-1, -1, -1, self.output_channels, self.neg_num_modes, -1)
-        distances_neg = torch.sqrt(((distances_neg - reps_neg)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
+            reps_neg_list = reps_neg.split(20, dim=0)
+            distance_neg_list = []
+            for rn in reps_neg_list:
+                dis = self.calculate_distance(rn, emb_vectors)
+                distance_neg_list.append(dis)
+            distance_neg = torch.cat(distance_neg_list, dim=1)
+        else:
+            distance = self.calculate_distance(reps, emb_vectors)
+            distance_neg = self.calculate_distance(reps_neg, emb_vectors)
 
-        probs_neg = torch.exp(-distances_neg**2/(2.0*self.sigma**2))
+        probs_neg = torch.exp(-distance_neg**2/(2.0*self.sigma**2))
         cls_score_neg = probs_neg.max(dim=2)[0]
 
-        probs_ori = torch.exp(-(distances)**2/(2.0*self.sigma**2))
+        probs_ori = torch.exp(-(distance)**2/(2.0*self.sigma**2))
         probs_ori = probs_ori.max(dim=2)[0]
-        probs = torch.exp(-(distances**2+(self.beta*(F.relu(self.neg_scope-distances_neg.min(dim=2, keepdim=True)[0])))**2)/(2.0*self.sigma**2))
+        probs = torch.exp(-(distance+self.beta*(2-distance_neg.min(dim=2, keepdim=True)[0]))**2/(2.0*self.sigma**2))
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
@@ -95,17 +103,16 @@ class DMLNegHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        # probs_bg = torch.sub(1, probs.max(1)[0].max(1, keepdim=True)[0])
-        # if self.training:
-        #     probs_bg = torch.sub(1, probs_cls.max(1)[0].max(1, keepdim=True)[0])
-        # else:
-        #     probs_bg = torch.zeros(probs_fg.shape[0], 1, probs_fg.shape[2], probs_fg.shape[3]).to(probs_fg.device)
-
-        # cls_score = torch.cat((probs_bg, probs_fg), 1)
-
         if save_outs:
-            return cls_score, cls_score_neg, distances, distances_neg, probs_ori, emb_vectors, reps, reps_neg
-        return cls_score, cls_score_neg, distances, distances_neg, probs_ori
+            return cls_score, cls_score_neg, distance, distance_neg, probs_ori, emb_vectors, reps, reps_neg
+        return cls_score, cls_score_neg, distance, distance_neg, probs_ori
+
+    def calculate_distance(self, reps, emb_vectors):
+        reps_ex = reps[None, :, :, :, None, None].expand(emb_vectors.size(0), -1, -1, -1, emb_vectors.size(2), emb_vectors.size(3))
+        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand_as(reps_ex)
+        distance = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
+        return distance
+
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
     emb_list = []
@@ -128,53 +135,8 @@ def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, str
 
     return nn.Sequential(*tuple(emb_list))
 
-class FeatureAdaptionCls(nn.Module):
-    """Feature Adaption Module.
-
-    Feature Adaption Module is implemented based on DCN v1.
-    It uses anchor shape prediction rather than feature map to
-    predict offsets of deformable conv layer.
-
-    Args:
-        in_channels (int): Number of channels in the input feature map.
-        out_channels (int): Number of channels in the output feature map.
-        kernel_size (int): Deformable conv kernel size.
-        deformable_groups (int): Deformable conv group size.
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=3,
-                 conv_offset_in_channels=2,
-                 conv_offset_kernel_size=3,
-                 deformable_groups=4):
-        super(FeatureAdaptionCls, self).__init__()
-        offset_channels = kernel_size * kernel_size * 2
-        self.conv_offset = nn.Conv2d(
-            conv_offset_in_channels, deformable_groups * offset_channels, conv_offset_kernel_size, padding=conv_offset_kernel_size//2,  bias=False)
-        self.conv_adaption = DeformConv(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
-            deformable_groups=deformable_groups)
-        self.relu = nn.ReLU(inplace=True)
-
-    def init_weights(self):
-        normal_init(self.conv_offset, std=0.1)
-        normal_init(self.conv_adaption, std=0.01)
-
-    def forward(self, x, shape, save_out=False):
-        offset = self.conv_offset(shape)
-        x = self.relu(self.conv_adaption(x, offset))
-        if save_out:
-            return x, offset
-        else:
-            return x
-
 @HEADS.register_module
-class GARetinaDMLNegHead5(GuidedAnchorHead):
+class GARetinaDMLNegHead4(GuidedAnchorHead):
     """Guided-Anchor-based RetinaNet head."""
     def __init__(self,
                  num_classes,
@@ -185,27 +147,33 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
                  freeze=False,
                  save_outs=False,
                  neg_sample_thresh=0.2,
-                 cls_emb_head_cfg=dict(emb_channels=(256, 128), num_modes=1, sigma=0.5, cls_norm=True, beta=0.3,
-                                       neg_num_modes=3),
+                 pos_sub_neg_thresh=0.1,
+                 alpha_hn=0.15,
+                 neg_hn_ratio=3,
+                 cls_emb_head_cfg=dict(emb_channels=(256, 128),
+                                       num_modes=1,
+                                       sigma=0.5,
+                                       cls_norm=False,
+                                       beta=0.3,
+                                       neg_num_modes=2),
                  loss_emb=dict(type='TripletLoss', alpha=0.15, loss_weight=1.0),
-                 loss_emb_neg=dict(type='TripletLoss', alpha=0.10, loss_weight=1.0),
-                 loss_cls_neg=dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
                  **kwargs):
         self.stacked_convs = stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
         self.neg_sample_thresh = neg_sample_thresh
+        self.pos_sub_neg_thresh = pos_sub_neg_thresh
+        self.alpha_hn = alpha_hn
+        self.neg_hn_ratio = neg_hn_ratio
         super().__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
-        self.loss_emb_neg = build_loss(loss_emb_neg)
-        self.loss_cls_neg = build_loss(loss_cls_neg)
         self.save_outs = save_outs
 
         # for c in [self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape, self.cls_feat_enhance,
         #           self.feature_adaption_cls, self.feature_adaption_reg, self.cls_head]:
         #     for p in c.parameters():
-        #         p.requires_grad = False
+        #         p.requires_grad = Falses
 
         if freeze:
             for c in [self.cls_convs, self.reg_convs, self.conv_loc, self.conv_shape,
@@ -243,14 +211,10 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
         self.conv_loc = nn.Conv2d(self.feat_channels, 1, 1)
         self.conv_shape = nn.Conv2d(self.feat_channels, self.num_anchors * 2, 1)
 
-        self.cls_feat_enhance = nn.Conv2d(self.feat_channels, self.deformable_groups, 3, stride=1, padding=1)
-
-        self.feature_adaption_cls = FeatureAdaptionCls(
+        self.feature_adaption_cls = FeatureAdaption(
             self.feat_channels,
             self.feat_channels,
             kernel_size=3,
-            conv_offset_in_channels=self.deformable_groups,
-            conv_offset_kernel_size=3,
             deformable_groups=self.deformable_groups)
 
         self.feature_adaption_reg = FeatureAdaption(
@@ -267,8 +231,6 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
         self.cls_head = DMLNegHead(emb_module, self.num_classes-1, **self.cls_emb_head_cfg)
 
     def init_weights(self):
-        normal_init(self.cls_feat_enhance, std=0.01)
-
         for m in self.cls_convs:
             normal_init(m.conv, std=0.01)
         for m in self.reg_convs:
@@ -296,14 +258,11 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
         loc_pred = self.conv_loc(cls_feat)
         shape_pred = self.conv_shape(reg_feat)
 
-        cls_feat_enhance_pre = self.cls_feat_enhance(cls_feat)
-        # cls_feat_enhance_pre = torch.cat([cls_feat_enhance_pre, loc_pred.detach()], dim=1)
-
         if self.save_outs:
-            feat_cls, offset_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
+            feat_cls, offset_cls = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)
             feat_reg, offset_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
         else:
-            feat_cls = self.feature_adaption_cls(cls_feat, cls_feat_enhance_pre, self.save_outs)
+            feat_cls = self.feature_adaption_cls(cls_feat, shape_pred, self.save_outs)
             feat_reg = self.feature_adaption_reg(reg_feat, shape_pred, self.save_outs)
 
         if not self.training:
@@ -319,7 +278,7 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
             return cls_score, bbox_pred, shape_pred, loc_pred, distance, cls_score_neg, distance_neg, probs_ori
         else:
             if self.save_outs:
-                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, emb_vectors, cls_feat_enhance_pre, offset_cls, offset_reg, distances, probs_cls, cls_score
+                return cls_score, bbox_pred, shape_pred, loc_pred, cls_feat, reg_feat, feat_cls, feat_reg, offset_cls, offset_reg, cls_score
             else:
                 return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -477,43 +436,31 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
                 num_total_samples=num_total_samples_emb)
             losses_emb.append(loss_emb)
 
-        num_total_samples_neg = 0
-        neg_labels_list = []
-        neg_labels_one_hot_list = []
-        for prob_ori, labels in zip(probs_ori, labels_list):
-            neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(prob_ori, labels)
-            # neg_labels, num_samples_neg, neg_labels_one_hot = self.get_neg_labels_single(cls_score, labels)
-            neg_labels_list.append(neg_labels)
-            neg_labels_one_hot_list.append(neg_labels_one_hot)
-            num_total_samples_neg += num_samples_neg
-            # print('num_samples_neg: ', num_samples_neg)
-        num_total_samples_neg = max(1, num_total_samples_neg)
-
-        labels_one_hot_list = []
-        for i, labels in enumerate(labels_list):
-            labels_flatten = labels.reshape(-1, 1)
-            labels_one_hot = labels_flatten.new_full((labels_flatten.shape[0], self.cls_out_channels + 1), 0,
-                                                     dtype=torch.long)
-            labels_one_hot = labels_one_hot.scatter(1, labels_flatten, 1)[:, 1:]
-            labels_one_hot_list.append(labels_one_hot)
-
-        losses_emb_neg = []
-        losses_emb_pos = []
-        num_total_samples_emb_neg = sum([int((_ > 0).sum()) for _ in neg_labels_list])
+        losses_pos_hn = []
+        losses_pos_hnp = []
+        losses_neg_hn = []
+        num_pos_hn_list = []
+        num_neg_hn_list = []
         for i in range(len(cls_scores)):
-            loss_emb_pos, loss_emb_neg = self.loss_emb_neg_single(
+            loss_pos_hn, loss_pos_hnp, num_pos_hn, loss_neg_hn, num_neg_hn = self.loss_emb_neg_single(
                 distances[i],
                 distances_neg[i],
                 labels_list[i],
-                neg_labels_list[i],
-                label_weights_list[i],
-                labels_one_hot_list[i],
-                neg_labels_one_hot_list[i],
-                num_total_samples_pos=num_total_samples_emb,
-                num_total_samples_neg=num_total_samples_emb_neg)
-            # print('loss_emb_neg: ', loss_emb_neg)
-            losses_emb_neg.append(loss_emb_neg)
-            losses_emb_pos.append(loss_emb_pos)
+                probs_ori[i],
+                cls_scores[i],
+            )
+            losses_pos_hn.append(loss_pos_hn)
+            losses_pos_hnp.append(loss_pos_hnp)
+            num_pos_hn_list.append(num_pos_hn)
+            losses_neg_hn.append(loss_neg_hn)
+            num_neg_hn_list.append(num_neg_hn)
+
+        num_pos_hn_all = max(1, sum(num_pos_hn_list))
+        num_neg_hn_all = max(1, sum(num_neg_hn_list))
+
+        losses_pos_hn = [_ / num_pos_hn_all for _ in losses_pos_hn]
+        losses_pos_hnp = [_ / num_pos_hn_all for _ in losses_pos_hnp]
+        losses_neg_hn = [_ / num_neg_hn_all for _ in losses_neg_hn]
 
         return dict(
             loss_cls=losses_cls,
@@ -521,62 +468,105 @@ class GARetinaDMLNegHead5(GuidedAnchorHead):
             loss_shape_cls=losses_shape,
             loss_loc=losses_loc,
             loss_emb=losses_emb,
-            loss_emb_neg=losses_emb_neg,
-            loss_emb_pos=losses_emb_pos,
+            loss_pos_hn=losses_pos_hn,
+            loss_pos_hnp=losses_pos_hnp,
+            loss_neg_hn=losses_neg_hn,
         )
 
-    def loss_cls_neg_single(self, cls_score, labels, label_weights, num_total_samples):
-        labels = labels.reshape(-1)
-        label_weights = label_weights.reshape(-1)
-        cls_score = cls_score.permute(0, 2, 3,
-                                      1).reshape(-1, self.cls_out_channels)
-        loss_cls = self.loss_cls_neg(
-            cls_score, labels, label_weights, avg_factor=num_total_samples)
-        return loss_cls
+    def loss_emb_neg_single(self, distance, neg_distance, labels, prob_ori, cls_score):
+        distance = distance.flatten(3).permute(0, 3, 1, 2).flatten(0, 1).squeeze(-1)
+        neg_distance = neg_distance.flatten(3).permute(0, 3, 1, 2).min(dim=-1, keepdim=True)[0].flatten(0, 1).squeeze(-1)
+        prob_ori = prob_ori.clone().detach()
+        prob_ori = prob_ori.permute(0, 2, 3, 1).flatten(0, 2)
+        cls_score = cls_score.clone().detach()
+        cls_score = cls_score.permute(0, 2, 3, 1).flatten(0, 2)
+        labels = labels.flatten(0)
+        n = labels.size(0)
 
-    def loss_emb_neg_single(self, distance, distance_neg, labels, labels_neg, label_weights, labels_ont_hot,
-                            neg_labels_one_hot, num_total_samples_pos, num_total_samples_neg):
-        distance = distance.flatten(3).permute(0, 3, 1, 2).flatten(0, 1)
-        distance_neg = distance_neg.flatten(3).permute(0, 3, 1, 2).min(dim=-1, keepdim=True)[0].flatten(0, 1)
+        labels_oh = F.one_hot(labels, num_classes=self.num_classes).byte()[:, 1:]
 
-        distance_cat = torch.cat([distance, distance_neg], dim=-1)
-
-        distance_cat_pos = distance_cat[labels_ont_hot==1].unsqueeze(-1)
-        labels = labels.reshape(-1)
         pos_inds = labels > 0
-        label_weights_pos = label_weights.reshape(-1)[pos_inds]
-        labels_pos = distance_cat_pos.new_full((distance_cat_pos.shape[0], 1), 1, dtype=torch.long)
-        loss_emb_pos = self.loss_emb_neg(
-            distance_cat_pos,
-            labels_pos,
-            label_weights_pos,
-            avg_factor=max(1, num_total_samples_pos))
 
-        distance_cat_neg = distance_cat[neg_labels_one_hot==1].unsqueeze(-1)
-        labels_neg = labels_neg.reshape(-1)
-        neg_inds = labels_neg > 0
-        label_weights_neg = label_weights.reshape(-1)[neg_inds]
-        labels_neg = distance_cat_neg.new_full((distance_cat_neg.shape[0], 1), 2, dtype=torch.long)
-        loss_emb_neg = self.loss_emb_neg(
-            distance_cat_neg,
-            labels_neg,
-            label_weights_neg,
-            avg_factor=max(1, num_total_samples_neg))
-        return loss_emb_pos, loss_emb_neg
+        # loss_pos_hn
+        if pos_inds.any():
+            prob_ori_pos = prob_ori[pos_inds]
+            cls_score_pos = cls_score[pos_inds]
+            neg_distance_pos = neg_distance[pos_inds]
+            distance_pos = distance[pos_inds]
+            labels_oh_pos = labels_oh[pos_inds]
+            prob_ori_pos_gt = prob_ori_pos[labels_oh_pos]
+            prob_ori_pos_other = prob_ori_pos.clone()
+            prob_ori_pos_other[labels_oh_pos] = -1.
+            prob_ori_pos_other_max_value, prob_ori_pos_other_max_ind = prob_ori_pos_other.max(dim=-1)
+            pos_hn_inds = prob_ori_pos_other_max_value > (prob_ori_pos_gt - self.pos_sub_neg_thresh)
 
-    def get_neg_labels_single(self, cls_score, labels):
-        cls_score = cls_score.flatten(2).permute(0, 2, 1)
-        # print('cls_score.max: ', cls_score.max())
-        # print('cls_score.min: ', cls_score.min())
-        pred_cls_score, pred_cls_id = cls_score.max(dim=-1)
-        neg_labels = pred_cls_id.clone() + 1
-        neg_labels[neg_labels==labels] = 0
-        neg_labels[pred_cls_score<self.neg_sample_thresh] = 0
-        num_samples = int((neg_labels > 0).sum())
-        neg_labels = neg_labels.reshape(-1, 1)
-        neg_labels_one_hot = neg_labels.new_full((neg_labels.shape[0], cls_score.shape[-1]+1), 0, dtype=torch.long)
-        neg_labels_one_hot = neg_labels_one_hot.scatter(1, neg_labels, 1)[:,  1:]
-        return neg_labels, num_samples, neg_labels_one_hot
+            # cls_score_pos_gt = cls_score_pos[labels_oh_pos]
+            # cls_score_pos_other = cls_score_pos.clone()
+            # cls_score_pos_other[labels_oh_pos] = -1.
+            # cls_score_pos_other_max_value, cls_score_pos_other_max_ind = cls_score_pos_other.max(dim=-1)
+            # pos_hn_inds_strict = cls_score_pos_other_max_value > (cls_score_pos_gt - self.pos_sub_neg_thresh)
+
+            # print(pos_hn_inds.shape)
+            # print(pos_hn_inds_strict.shape)
+
+            if pos_hn_inds.any():
+                neg_distance_pos_hn = neg_distance_pos[pos_hn_inds]
+                distance_pos_hn = distance_pos[pos_hn_inds]
+                pos_hn_labels = prob_ori_pos_other_max_ind[pos_hn_inds]
+                # print(neg_distance_pos_hn.shape)
+                # print(distance_pos_hn.shape)
+                # print(pos_hn_labels.shape)
+                hn_labels_oh = F.one_hot(pos_hn_labels, num_classes=self.num_classes-1).byte()
+                # print(hn_labels_oh.shape)
+                loss_pos_hn = F.relu(neg_distance_pos_hn[hn_labels_oh] - distance_pos_hn[hn_labels_oh] + self.alpha_hn)
+                # print(loss_pos_hn.shape)
+                # print('===========')
+                # weights = loss_pos_hn.new_full(loss_pos_hn.size(), 0.1)
+                # weights[pos_hn_inds_strict] = 1.
+                # loss_pos_hn = (loss_pos_hn * weights).sum()
+                loss_pos_hn = loss_pos_hn.sum()
+
+                labels_oh_pos_hn = labels_oh_pos[pos_hn_inds]
+                loss_pos_hnp = F.relu(distance_pos_hn[labels_oh_pos_hn] - neg_distance_pos_hn[labels_oh_pos_hn] + self.alpha_hn)
+                num_pos_hn = pos_hn_inds.sum()
+                # num_pos_hn = max(int(pos_hn_inds_strict.sum()), 1)
+            else:
+                loss_pos_hnp = torch.zeros(1).to(distance.device)
+                loss_pos_hn = torch.zeros(1).to(distance.device)
+                num_pos_hn = 0
+        else:
+            loss_pos_hnp = torch.zeros(1).to(distance.device)
+            loss_pos_hn = torch.zeros(1).to(distance.device)
+            num_pos_hn = 0
+        # loss_pos_hn = torch.zeros(1).to(distance.device)
+        # num_pos_hn = 0
+
+        neg_inds = (labels == 0)
+        # loss_neg_hn
+        if neg_inds.any():
+            prob_ori_neg = prob_ori[neg_inds]
+            neg_distance_neg = neg_distance[neg_inds]
+            distance_neg = distance[neg_inds]
+            prob_ori_neg_max_value, prob_ori_neg_max_ind = prob_ori_neg.max(dim=-1)
+            neg_hn_inds = prob_ori_neg_max_value > self.neg_sample_thresh
+            if neg_hn_inds.any():
+                neg_distance_neg_hn = neg_distance_neg[neg_hn_inds]
+                distance_neg_hn = distance_neg[neg_hn_inds]
+                neg_hn_labels = prob_ori_neg_max_ind[neg_hn_inds]
+                hn_labels_oh = F.one_hot(neg_hn_labels, num_classes=self.num_classes-1).byte()
+                loss_neg_hn = F.relu(neg_distance_neg_hn[hn_labels_oh] - distance_neg_hn[hn_labels_oh] + self.alpha_hn)
+                num_neg_hn = min(loss_neg_hn.size(0), self.neg_hn_ratio * pos_inds.sum())
+                loss_neg_hn = loss_neg_hn.sort(dim=0, descending=True)[0][:num_neg_hn]
+                loss_neg_hn = loss_neg_hn.sum()
+            else:
+                loss_neg_hn = torch.zeros(1).to(distance.device)
+                num_neg_hn = 0
+        else:
+            loss_neg_hn = torch.zeros(1).to(distance.device)
+            num_neg_hn = 0
+
+        return loss_pos_hn, loss_pos_hnp, num_pos_hn, loss_neg_hn, num_neg_hn
+
 
     def loss_single(self, cls_score, bbox_pred, labels, label_weights,
                     bbox_targets, bbox_weights, num_total_samples, cfg):
