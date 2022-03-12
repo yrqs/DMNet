@@ -158,5 +158,5 @@ def select_novel(novel_id):
 
 
 if __name__ == '__main__':
-    # main1()
-    select_novel(1)
+    main1()
+    # select_novel(1)

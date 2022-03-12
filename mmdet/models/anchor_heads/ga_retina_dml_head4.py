@@ -16,7 +16,7 @@ from ..losses import FocalLoss
 
 import random
 import os
-
+from mmdet.utils.show_feature import show_dis
 
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -35,20 +35,24 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 base_ids=None,
+                 novel_ids=None,
                  freeze=False):
         assert num_modes==1
         super().__init__()
+        self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else output_channels
         self.output_channels = output_channels
         self.num_modes = num_modes
         self.sigma = sigma
         self.emb_module = emb_module
         self.emb_channels = emb_channels
-        self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
+        self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.representations = nn.Parameter(
-            torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
+            torch.FloatTensor(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
-
+        self.base_ids=base_ids
+        self.novel_ids=novel_ids
         normal_init(self.rep_fc, std=0.01)
         # constant_init(self.neg_offset_fc, 0)
 
@@ -63,16 +67,33 @@ class DMLHead(nn.Module):
 
         if self.training:
             reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
-            reps  = reps.view(self.output_channels, self.num_modes, self.emb_channels[-1])
+            reps  = reps.view(self.num_reps, self.num_modes, self.emb_channels[-1])
             reps = F.normalize(reps, p=2, dim=2)
             self.representations.data = reps.detach()
         else:
             reps = self.representations.detach()
-        
-        distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
-        distances = torch.sqrt(((distances - reps)**2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
+
+        if self.base_ids is not None:
+            reps = reps[self.base_ids, :, :]
+
+        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand(-1, self.output_channels, self.num_modes, -1, -1, -1)
+        reps_ex = reps[None, :, :, :, None, None].expand_as(emb_vectors_ex)
+        distances = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
         probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
+
+        # if not self.training:
+        #     emb_vectors_flat = emb_vectors.permute(0, 2, 3, 1).flatten(0, 2)
+        #     probs_flat = probs.max(dim=2)[0].permute(0, 2, 3, 1).flatten(0, 2).max(1)[0]
+        #     ind_max = probs_flat.max(0)[1]
+        #     print('max_probs: ', probs_flat[ind_max])
+        #     ev_max = emb_vectors_flat[ind_max, :]
+        #     dis_l2 = (ev_max.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
+        #     show_dis(dis_l2, (0, 0.3))
+        #     ind_min = probs_flat.min(0)[1]
+        #     print('min_probs: ', probs_flat[ind_min])
+        #     ev_min = emb_vectors_flat[ind_min, :]
+        #     dis_l2 = (ev_min.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
+        #     show_dis(dis_l2, (0, 0.3))
 
         if self.cls_norm:
             probs_sumj = probs.sum(2)
@@ -202,6 +223,10 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         cls_feat = x
         reg_feat = x
 
+        if self.training and (self.grad_scale is not None):
+            cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)
+            reg_feat = scale_tensor_gard(reg_feat, self.grad_scale)
+
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
@@ -212,10 +237,6 @@ class GARetinaDMLHead4(GuidedAnchorHead):
 
         cls_feat_adp = self.feature_adaption_cls(cls_feat, shape_pred)
         reg_feat_adp = self.feature_adaption_reg(reg_feat, shape_pred)
-
-        if self.training and (self.grad_scale is not None):
-            cls_feat_adp = scale_tensor_gard(cls_feat_adp, self.grad_scale)
-            reg_feat_adp = scale_tensor_gard(reg_feat_adp, self.grad_scale)
 
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
@@ -377,7 +398,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
-            loss_shape_cls=losses_shape,
+            loss_shape=losses_shape,
             loss_loc=losses_loc,
             loss_emb=losses_emb)
 

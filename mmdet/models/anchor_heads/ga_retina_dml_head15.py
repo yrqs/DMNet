@@ -15,6 +15,8 @@ from ..builder import build_loss
 from mmdet.core.bbox.geometry import bbox_overlaps
 import os
 
+from mmdet.utils.show_feature import show_feature
+
 
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
@@ -230,6 +232,7 @@ class GARetinaDMLHead15(GuidedAnchorHead):
         loc_pred = self.conv_loc(reg_feat_adp)
         loc_pred_sigmoid = loc_pred.sigmoid()
         if not self.training:
+            loc_pred_sigmoid[loc_pred_sigmoid < 0.3] = loc_pred_sigmoid[loc_pred_sigmoid < 0.3]**2
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
         else:
             mask = None
@@ -237,7 +240,7 @@ class GARetinaDMLHead15(GuidedAnchorHead):
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
         cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
-        if self.training and (self.grad_scale is not None):
+        if self.training:
             loc_pred_sigmoid = scale_tensor_gard(loc_pred_sigmoid, 0.1)
         cls_score = cls_score * loc_pred_sigmoid
 

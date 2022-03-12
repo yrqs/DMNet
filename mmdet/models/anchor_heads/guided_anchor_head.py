@@ -235,8 +235,8 @@ class GuidedAnchorHead(AnchorHead):
         self.num_anchors = 1
         self.use_sigmoid_cls = loss_cls.get('use_sigmoid', False)
         # self.use_sigmoid_cls = True
-        self.cls_focal_loss = loss_cls['type'] in ['FocalLoss']
-        self.loc_focal_loss = loss_loc['type'] in ['FocalLoss']
+        self.cls_focal_loss = loss_cls['type'] in ['FocalLoss', 'VarifocalLoss']
+        self.loc_focal_loss = loss_loc['type'] in ['FocalLoss', 'VarifocalLoss']
         if self.use_sigmoid_cls:
             self.cls_out_channels = self.num_classes - 1
         else:

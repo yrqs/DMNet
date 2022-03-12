@@ -34,7 +34,7 @@ changes = {
 def init_weights():
     for c in changes:
         if 'weight' in c:
-            nn.init.normal_(checkpoint['state_dict'][c], mean=0, std=0.1)
+            nn.init.normal_(checkpoint['state_dict'][c], mean=0, std=0.01)
         if 'bias' in c:
             if 'cls' in c and 'retina' in c:
                 bias_cls = bias_init_with_prob(0.01)
@@ -55,6 +55,12 @@ VOC_novel_sets = [['bird', 'bus', 'cow', 'motorbike', 'sofa'],
               ['aeroplane', 'bottle', 'cow', 'horse', 'sofa'],
               ['boat', 'cat', 'motorbike', 'sheep', 'sofa']]
 
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
+
 CLASSES = [VOC_CLASSES][0]
 novel_sets = [VOC_novel_sets][0]
 novel_index = 0
@@ -71,6 +77,24 @@ def change_rep():
     new_checkpoint_path = checkpoint_path[:-4] + '_rep' + checkpoint_path[-4:]
     torch.save(checkpoint, new_checkpoint_path)
 
+def init_novel_rep(novel_ids):
+    rep_fc_w = checkpoint['state_dict']['bbox_head.cls_head.rep_fc.weight'].reshape(-1, 128)
+    init_w = rep_fc_w.clone()
+    nn.init.normal_(init_w, std=0.01)
+    rep_fc_w[novel_ids, :] = init_w[novel_ids, :]
+
+    rep_fc_b = checkpoint['state_dict']['bbox_head.cls_head.rep_fc.bias'].reshape(-1, 128)
+    init_b = rep_fc_b.clone()
+    nn.init.constant_(init_b, 0)
+    rep_fc_b[novel_ids, :] = init_b[novel_ids, :]
+
+    checkpoint['state_dict']['bbox_head.cls_head.rep_fc.weight'].data = rep_fc_w.reshape(-1, 1)
+    checkpoint['state_dict']['bbox_head.cls_head.rep_fc.bias'].data = rep_fc_b.reshape(-1)
+
+    new_checkpoint_path = checkpoint_path[:-4] + '_init_nrep' + checkpoint_path[-4:]
+    torch.save(checkpoint, new_checkpoint_path)
+
 if __name__ == '__main__':
-    init_weights()
+    init_novel_rep(VOC_novel_ids[0])
+    # init_weights()
     # change_rep()

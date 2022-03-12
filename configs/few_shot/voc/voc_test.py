@@ -42,6 +42,7 @@ data = dict(
             # img_prefix=data_root + 'VOC2007/',
             # ann_file=data_root + 'VOC2007/ImageSets/Main/bottle_test_diy.txt',
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+            # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
             ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
             img_prefix=data_root + 'VOC2007/',
             # ann_file=[

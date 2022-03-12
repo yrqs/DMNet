@@ -132,7 +132,7 @@ class VOCDataset(XMLDataset):
 
 
 @DATASETS.register_module
-class VOCDatasetNovel(VOCDataset):
+class VOCDatasetMeta(VOCDataset):
     CLASSES = ('bird', 'bus', 'cow', 'motorbike', 'sofa')
     def evaluate(self,
                  results,
@@ -180,13 +180,28 @@ class VOCDatasetNovel(VOCDataset):
         return eval_results
 
 @DATASETS.register_module
-class VOCDatasetNovel1(VOCDatasetNovel):
+class VOCDatasetNovel1(VOCDatasetMeta):
     CLASSES = ('bird', 'bus', 'cow', 'motorbike', 'sofa')
 
 @DATASETS.register_module
-class VOCDatasetNovel2(VOCDatasetNovel):
+class VOCDatasetNovel2(VOCDatasetMeta):
     CLASSES = ('aeroplane', 'bottle', 'cow', 'horse', 'sofa')
 
 @DATASETS.register_module
-class VOCDatasetNovel3(VOCDatasetNovel):
+class VOCDatasetNovel3(VOCDatasetMeta):
     CLASSES = ('boat', 'cat', 'motorbike', 'sheep', 'sofa')
+
+@DATASETS.register_module
+class VOCDatasetBase1(VOCDatasetMeta):
+    CLASSES = ('aeroplane', 'bicycle', 'boat', 'bottle', 'car', 'cat', 'chair', 'diningtable',
+               'dog', 'horse', 'person', 'pottedplant', 'sheep', 'train', 'tvmonitor')
+
+@DATASETS.register_module
+class VOCDatasetBase2(VOCDatasetMeta):
+    CLASSES = ('bicycle', 'bird', 'boat', 'bus', 'car', 'cat', 'chair', 'diningtable', 'dog',
+               'motorbike', 'person', 'pottedplant', 'sheep', 'train', 'tvmonitor')
+
+@DATASETS.register_module
+class VOCDatasetBase3(VOCDatasetMeta):
+    CLASSES = ('aeroplane', 'bicycle', 'bird', 'bottle', 'bus', 'car', 'chair', 'cow',
+               'diningtable', 'dog', 'horse', 'person', 'pottedplant', 'train', 'tvmonitor')
