@@ -19,7 +19,7 @@ CUDA_VISIBLE_DEVICES=1 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPU
 
 GPU_ID=1
 GPUS=1
-CONFIG=$CONFIG_PATH'finetune.py'[]
+CONFIG=$CONFIG_PATH'finetune.py'
 
 for i in {1,2,3,5,10}
 do

@@ -26,17 +26,33 @@ CLASSES_COCO = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
                'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush')
 
-CLASSES = CLASSES_COCO
+CLASSES = CLASSES_VOC
+# CLASSES = CLASSES_COCO
 
 novel_sets = [['bird', 'bus', 'cow', 'motorbike', 'sofa'],
               ['aeroplane', 'bottle', 'cow', 'horse', 'sofa'],
               ['boat', 'cat', 'motorbike', 'sheep', 'sofa']]
 
+VOC_base_ids = (
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+)
+
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
 
 # checkpoint_file = 'work_dirs/ga_retina_dml3_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split2/wo_norm/256_256/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split2/wo_norm/base/epoch_16.pth'
-# checkpoint_file = 'work_dirs/retina_dml3_voc_split2/wo_norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/retina_dml3_voc_split1/wo_norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/retina_dml3_voc_split1/base_aug/wo_norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/retina_dml3_voc_split1/norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/retina_dml3_voc_split1/base_aug/norm/base/epoch_16.pth'
+checkpoint_file = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml9_voc_split2/wo_norm/10shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml9_voc_split2/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml11_voc_split2/wo_norm/256_256/base/epoch_16.pth'
@@ -45,13 +61,26 @@ novel_sets = [['bird', 'bus', 'cow', 'motorbike', 'sofa'],
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/sigma025_alpha03/1shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/10shot/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/10shot/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/base_aug/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1/norm/default/10shot/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1_old/wo_norm/default/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/base/epoch_20.pth'
-checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/30shot/epoch_20.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/30shot/epoch_20.pth'
 
 checkpoint = torch.load(checkpoint_file, map_location=torch.device("cpu"))
 # for key in checkpoint['state_dict'].keys():
 #     print(key)
 reps = checkpoint['state_dict']['bbox_head.cls_head.representations']
+
+reps_fc_weight = checkpoint['state_dict']['bbox_head.cls_head.rep_fc.weight']
+reps_fc_bias = checkpoint['state_dict']['bbox_head.cls_head.rep_fc.bias'].reshape_as(reps_fc_weight)
+reps_ori = (reps_fc_weight + reps_fc_bias).reshape_as(reps)
+
 if 'dml11' in checkpoint_file:
     reps = checkpoint['state_dict']['bbox_head.cls_head.representations'].expand_as(reps) + reps
     reps = reps.view(len(CLASSES), 1, -1)
@@ -154,14 +183,19 @@ def reps_visual(reps, dim=2):
         plt.yticks([])
         plt.show()
 
-def show_dis_between_reps(reps):
+def show_dis_between_reps(reps, cls_ids=None):
     reps = reps.reshape(-1, reps.size(-1))
+    class_names = CLASSES
+    if cls_ids is not None:
+        reps = reps[cls_ids, :]
+        class_names = [class_names[i] for i in cls_ids]
     num_cls = reps.shape[0]
     scale_ls = range(num_cls)
-    label_ls = list(CLASSES)
+    label_ls = list(class_names)
     reps_exp1 = reps.unsqueeze(0).expand(num_cls, -1, -1)
     reps_exp2 = reps.unsqueeze(1).expand(-1, num_cls, -1)
     dis_mat = torch.sqrt(((reps_exp1-reps_exp2)**2).sum(-1))
+    print('dis_mat.sum(): ', dis_mat.sum())
     fig = plt.figure()
     norm = matplotlib.colors.Normalize(vmin=0, vmax=2)
     plt.imshow(dis_mat, cmap='rainbow', norm=norm)
@@ -170,6 +204,22 @@ def show_dis_between_reps(reps):
     plt.yticks(scale_ls, label_ls)
     # fig.autofmt_xdate()
     plt.xticks(rotation=270)
+    plt.show()
+
+def show_rep_dims(reps, cls_ids=None):
+    reps = reps.reshape(-1, reps.size(-1))
+    class_names = CLASSES
+    if cls_ids is not None:
+        reps = reps[cls_ids, :]
+        class_names = [class_names[i] for i in cls_ids]
+    num_cls = reps.shape[0]
+    scale_ls = range(num_cls)
+    label_ls = list(class_names)
+    fig = plt.figure()
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=0.4)
+    plt.imshow(torch.abs(reps), cmap='rainbow', norm=norm)
+    plt.colorbar()
+    plt.yticks(scale_ls, label_ls)
     plt.show()
 
 def show_dim_dis_between_reps(reps, cls_id):
@@ -213,12 +263,17 @@ def show_emb_vectors():
     emb_rep = torch.cat([emb_vectors, reps], dim=0)
     reps_visual(emb_rep, dim=3)
 
-def show_dim_dis_sum(reps):
+def show_dim_dis_sum(reps, cls_ids=None):
+    reps = reps.reshape(-1, reps.size(-1))
+    class_names = CLASSES
+    if cls_ids is not None:
+        reps = reps[cls_ids, :]
+        class_names = [class_names[i] for i in cls_ids]
+
     num_cls = reps.shape[0]
     scale_ls = range(num_cls)
-    label_ls = list(CLASSES)
+    label_ls = list(class_names)
 
-    reps = reps.reshape(-1, reps.size(-1))
     reps_exp1 = reps.unsqueeze(0).expand(num_cls, -1, -1)
     reps_exp2 = reps.unsqueeze(1).expand(-1, num_cls, -1)
     dis_mat = ((reps_exp1-reps_exp2)**2).mean(dim=1)
@@ -235,6 +290,8 @@ if __name__ == '__main__':
     # show_reps(reps, 2)
     # reps_visual(reps)
     # show_emb_vectors()
-    # show_dis_between_reps(reps)
-    show_dim_dis_between_reps(reps, CLASSES.index('cat'))
-    # show_dim_dis_sum(reps)
+    print((reps_ori / reps).var(-1))
+    show_dis_between_reps(reps_ori, VOC_base_ids[0])
+    # show_rep_dims(reps, VOC_base_ids[0])
+    # show_dim_dis_between_reps(reps, CLASSES.index('cat'))
+    # show_dim_dis_sum(reps, VOC_base_ids[0])

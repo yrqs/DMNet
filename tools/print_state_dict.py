@@ -10,7 +10,8 @@ import torch
 # checkpoint_path = 'work_dirs/ga_retina_dml3_fpn_emb256_64_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x1_10_14_16_ind2_1/epoch_16.pth'
 # checkpoint_path = '/home/luyue/Documents/mmdetection_old/work_dirs/test/epoch_2.pth'
 # checkpoint_path = '/home/luyue/.cache/torch/checkpoints/resnet101_caffe-3ad79236.pth'
-checkpoint_path = 'work_dirs/retina_dml3_coco/base_aug/norm/base/epoch_24.pth'
+# checkpoint_path = 'work_dirs/retina_dml3_coco/base_aug/norm/base/epoch_24.pth'
+checkpoint_path = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
 
 checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
 

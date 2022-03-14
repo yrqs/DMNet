@@ -18,7 +18,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 1
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -73,7 +73,7 @@ model = dict(
             use_sigmoid=True,
             alpha=0.75,
             gamma=2.0,
-            iou_weighted=True,
+            iou_weighted=False,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))

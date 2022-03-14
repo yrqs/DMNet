@@ -352,16 +352,16 @@ class GARetinaDMLHead17(GuidedAnchorHead):
             num_total_pos if self.cls_focal_loss else num_total_pos +
                                                       num_total_neg)
 
-        iou_cls_targets = self.get_iou_cls_target(
-            guided_anchors_list_clone,
-            labels_list,
-            gt_bboxes)
+        labels_oh_list = []
+        for l in labels_list:
+            labels_oh_list.append(F.one_hot(l.flatten(0), num_classes=self.num_classes-1).float()[:, 1:])
+
         # get classification and bbox regression losses
         losses_cls, losses_bbox = multi_apply(
             self.loss_single,
             cls_scores,
             bbox_preds,
-            iou_cls_targets,
+            labels_oh_list,
             label_weights_list,
             bbox_targets_list,
             bbox_weights_list,
@@ -425,21 +425,6 @@ class GARetinaDMLHead17(GuidedAnchorHead):
             bbox_weights,
             avg_factor=num_total_samples)
         return loss_cls, loss_bbox
-
-    def get_iou_cls_target(self, guided_anchors_list, labels_list, gt_bboxes):
-        num_img = len(gt_bboxes)
-        num_lvl = len(labels_list)
-        iou_cls_targets = []
-        for lvl in range(num_lvl):
-            ious_lvl = []
-            for i in range(num_img):
-                ious = bbox_overlaps(guided_anchors_list[i][lvl], gt_bboxes[i]).max(dim=1)[0]
-                ious_lvl.append(ious.unsqueeze(0))
-            ious_lvl = torch.cat(ious_lvl, dim=0)
-            labels_oh = F.one_hot(labels_list[lvl].flatten(0), num_classes=self.num_classes).float()[:, 1:]
-            iou_cls_target = labels_oh * ious_lvl.reshape(-1, 1)
-            iou_cls_targets.append(iou_cls_target)
-        return iou_cls_targets
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):
         if label.dim() == 1:

@@ -9,7 +9,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 1
+gpu_num = 8
 
 split_num = 1
 

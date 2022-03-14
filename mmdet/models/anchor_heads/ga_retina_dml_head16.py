@@ -96,7 +96,7 @@ class DMLHead(nn.Module):
         emb_vectors_ex_key = torch.gather(emb_vectors_ex, 3, key_channels_ind_ex)
         reps_ex_key = torch.gather(reps_ex, 3, key_channels_ind_ex)
         distances_key = torch.sqrt(((emb_vectors_ex_key - reps_ex_key)**2).sum(3))
-        probs_key = torch.exp(-(distances_key)**2/(2.0*self.sigma_key**2)).squeeze(2)
+        # probs_key = torch.exp(-(distances_key)**2/(2.0*self.sigma_key**2)).squeeze(2)
 
         if self.cls_norm:
             probs_sumj = probs.sum(2)
@@ -105,11 +105,11 @@ class DMLHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        cls_score = cls_score * probs_key
+        # cls_score = cls_score * probs_key
 
         if save_outs:
             return cls_score, distances, emb_vectors, reps
-        return cls_score, distances
+        return cls_score, distances, distances_key
 
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
@@ -252,11 +252,11 @@ class GARetinaDMLHead16(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
+        cls_score, distance, distance_key = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:
-            return cls_score, bbox_pred, shape_pred, loc_pred, distance
+            return cls_score, bbox_pred, shape_pred, loc_pred, distance, distance_key
         else:
             return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -284,13 +284,14 @@ class GARetinaDMLHead16(GuidedAnchorHead):
             return cls_scores, bbox_preds, shape_preds_reg, loc_preds
 
     @force_fp32(
-        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances'))
+        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances', 'distances_key'))
     def loss(self,
              cls_scores,
              bbox_preds,
              shape_preds,
              loc_preds,
              distances,
+             distances_key,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -402,12 +403,23 @@ class GARetinaDMLHead16(GuidedAnchorHead):
                 num_total_samples=num_total_samples_emb)
             losses_emb.append(loss_emb)
 
+        losses_emb_key = []
+        for i in range(len(distances)):
+            loss_emb_key = self.loss_emb_single(
+                distances_key[i],
+                labels_list[i],
+                label_weights_list[i],
+                num_total_samples=num_total_samples_emb)
+            losses_emb_key.append(loss_emb_key)
+
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_shape=losses_shape,
             loss_loc=losses_loc,
-            loss_emb=losses_emb)
+            loss_emb=losses_emb,
+            loss_emb_key=losses_emb_key,
+        )
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):
         if label.dim() == 1:
