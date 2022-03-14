@@ -354,7 +354,7 @@ class GARetinaDMLHead17(GuidedAnchorHead):
 
         labels_oh_list = []
         for l in labels_list:
-            labels_oh_list.append(F.one_hot(l.flatten(0), num_classes=self.num_classes-1).float()[:, 1:])
+            labels_oh_list.append(F.one_hot(l.flatten(0), num_classes=self.num_classes).float()[:, 1:])
 
         # get classification and bbox regression losses
         losses_cls, losses_bbox = multi_apply(
@@ -407,14 +407,15 @@ class GARetinaDMLHead17(GuidedAnchorHead):
             loss_loc=losses_loc,
             loss_emb=losses_emb)
 
-    def loss_single(self, cls_score, bbox_pred, iou_cls_target, label_weights,
+    def loss_single(self, cls_score, bbox_pred, label_oh, label_weights,
                     bbox_targets, bbox_weights, num_total_samples, cfg):
         # classification loss
         label_weights = label_weights.reshape(-1, 1)
         cls_score = cls_score.permute(0, 2, 3,
                                       1).reshape(-1, self.cls_out_channels)
+        label_oh = label_oh.reshape_as(cls_score)
         loss_cls = self.loss_cls(
-            cls_score, iou_cls_target, label_weights, avg_factor=num_total_samples)
+            cls_score, label_oh, label_weights, avg_factor=num_total_samples)
         # regression loss
         bbox_targets = bbox_targets.reshape(-1, 4)
         bbox_weights = bbox_weights.reshape(-1, 4)
