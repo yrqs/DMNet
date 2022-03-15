@@ -33,20 +33,24 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 base_ids=None,
+                 novel_ids=None,
                  freeze=False):
         assert num_modes == 1
         super().__init__()
+        self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else output_channels
         self.output_channels = output_channels
         self.num_modes = num_modes
         self.sigma = sigma
         self.emb_module = emb_module
         self.emb_channels = emb_channels
-        self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
+        self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.representations = nn.Parameter(
-            torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
+            torch.FloatTensor(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
-
+        self.base_ids=base_ids
+        self.novel_ids=novel_ids
         normal_init(self.rep_fc, std=0.01)
         # constant_init(self.neg_offset_fc, 0)
 
@@ -61,16 +65,19 @@ class DMLHead(nn.Module):
 
         if self.training:
             reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
-            reps = reps.view(self.output_channels, self.num_modes, self.emb_channels[-1])
+            reps = reps.view(self.num_reps, self.num_modes, self.emb_channels[-1])
             reps = F.normalize(reps, p=2, dim=2)
             self.representations.data = reps.detach()
         else:
             reps = self.representations.detach()
 
-        distances = emb_vectors.permute(0, 2, 3, 1).unsqueeze(3).unsqueeze(4)
-        distances = distances.expand(-1, -1, -1, self.output_channels, self.num_modes, -1)
-        distances = torch.sqrt(((distances - reps) ** 2).sum(-1)).permute(0, 3, 4, 1, 2).contiguous()
-        probs = torch.exp(-(distances) ** 2 / (2.0 * self.sigma ** 2))
+        if self.base_ids is not None:
+            reps = reps[self.base_ids, :, :]
+
+        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand(-1, self.output_channels, self.num_modes, -1, -1, -1)
+        reps_ex = reps[None, :, :, :, None, None].expand_as(emb_vectors_ex)
+        distances = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
+        probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
 
         if self.cls_norm:
             probs_sumj = probs.sum(2)
@@ -124,7 +131,6 @@ class GARetinaDMLHead12(GuidedAnchorHead):
                      cls_norm=False,
                  ),
                  loss_rep_thr=1.3,
-                 base_ids=(1,2,3,5,6,7,8,10,11,13,14,15,16,18,19),
                  save_outs=False,
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
                  **kwargs):
@@ -133,7 +139,6 @@ class GARetinaDMLHead12(GuidedAnchorHead):
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
         self.loss_rep_thr = loss_rep_thr
-        self.base_ids = base_ids
         super().__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs

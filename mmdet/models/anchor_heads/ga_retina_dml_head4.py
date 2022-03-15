@@ -87,8 +87,16 @@ class DMLHead(nn.Module):
         #     ind_max = probs_flat.max(0)[1]
         #     print('max_probs: ', probs_flat[ind_max])
         #     ev_max = emb_vectors_flat[ind_max, :]
+        #     show_dis(ev_max[None, :], (0, 0.4))
+        #     ev_max_att = ev_max[None, :].expand_as(reps.squeeze(1)) * reps.squeeze(1)
+        #     ev_max_att = F.normalize(ev_max_att, p=2, dim=1)
+        #     show_dis(ev_max_att, (0, 0.4))
         #     dis_l2 = (ev_max.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
         #     show_dis(dis_l2, (0, 0.3))
+        #     print('dis_l2    : ', torch.exp(-torch.sqrt(dis_l2.sum(-1))**2 / (2*self.sigma**2)))
+        #     dis_l2_att = (ev_max_att - reps.squeeze(1))**2
+        #     show_dis(dis_l2_att, (0, 0.3))
+        #     print('dis_l2_att: ', torch.exp(-torch.sqrt(dis_l2_att.sum(-1))**2 / (2*self.sigma**2)))
         #     ind_min = probs_flat.min(0)[1]
         #     print('min_probs: ', probs_flat[ind_min])
         #     ev_min = emb_vectors_flat[ind_min, :]

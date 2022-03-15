@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import normal_init, constant_init
 
-from mmdet.ops import ConvModule, MaskedConv2d, DeformConv
+from mmdet.ops import ConvModule, MaskedConv2d, Scale
 from ..registry import HEADS
 from ..utils import bias_init_with_prob
 from .guided_anchor_head import FeatureAdaption, GuidedAnchorHead
@@ -22,6 +22,9 @@ def inverse_sigmoid(x, eps=1e-5):
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1/x2)
 
+def scale_tensor_gard(t, grad_scale):
+    return (1-grad_scale) * t.detach() + grad_scale * t
+
 class DMLHead(nn.Module):
     def __init__(self,
                  emb_module,
@@ -30,69 +33,59 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
-                 nhead=8,
-                 dropout=0.1,
+                 base_ids=None,
+                 novel_ids=None,
                  freeze=False):
         assert num_modes==1
         super().__init__()
+        self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else output_channels
         self.output_channels = output_channels
         self.num_modes = num_modes
         self.sigma = sigma
         self.emb_module = emb_module
         self.emb_channels = emb_channels
-        self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
+        self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.representations = nn.Parameter(
-            torch.FloatTensor(self.output_channels, self.emb_channels[-1]),
+            torch.zeros(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
-
-        self.self_attn = nn.MultiheadAttention(self.emb_channels[-1], nhead, dropout=dropout)
-        self.norm1 = nn.LayerNorm(self.emb_channels[-1])
-        self.dropout1 = nn.Dropout(dropout)
-        self.mlp = MLP(2, self.emb_channels[-1], self.emb_channels[-1])
-
+        self.base_ids=base_ids
+        self.novel_ids=novel_ids
+        self.scale = Scale(3.0, requires_grad=True)
         normal_init(self.rep_fc, std=0.01)
-        # constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
                 for p in c.parameters():
                     p.requires_grad = False
 
-    def forward(self, x, save_outs=False):
+    def forward(self, x, grad_scale=None, save_outs=False):
+        emb_vectors = self.emb_module(x)
+
         if self.training:
             reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
-            reps = reps.view(self.output_channels*self.num_modes, self.emb_channels[-1])
+            reps  = reps.view(self.num_reps, self.num_modes, self.emb_channels[-1])
+            reps = F.normalize(reps, p=2, dim=2)
             self.representations.data = reps.detach()
         else:
             reps = self.representations.detach()
 
-        reps_norm = F.normalize(reps, p=2, dim=1).unsqueeze(1)
-
-        emb_vectors = self.emb_module(x)
+        if self.base_ids is not None:
+            reps = reps[self.base_ids, :, :]
 
         n = emb_vectors.size(0)
         w = emb_vectors.size(2)
         h = emb_vectors.size(3)
 
-        reps_ori = reps.unsqueeze(0)
-        reps_att = self.self_attn(reps_ori, reps_ori, value=reps_ori)[0]
-        reps_att = reps_ori + self.dropout1(reps_att)
-        reps_att = self.norm1(reps_att)
-        reps_att = self.mlp(reps_att).squeeze(0).unsqueeze(1)
+        reps_ex = reps[None, :, :, :, None, None].expand(n, -1, -1, -1, w, h)
+        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand_as(reps_ex)
+        emb_vectors_ex = F.normalize(emb_vectors_ex, p=2, dim=3)
+        dis_l2 = (emb_vectors_ex - reps_ex) ** 2
+        dis_l2_att = self.scale(reps_ex.abs()) * dis_l2
+        distances = torch.sqrt(dis_l2.sum(3))
+        distances_att = torch.sqrt(dis_l2_att.sum(3))
+        probs = torch.exp(-(distances_att)**2/(2.0*self.sigma**2))
 
-        reps_att_ex = reps_att[None, :, :, :, None, None].expand(n, -1, -1, -1, w, h)
-        reps_norm_ex = reps_norm[None, :, :, :, None, None].expand_as(reps_att_ex)
-        emb_vectors_ex = emb_vectors[:, None, None, :, :, :].expand_as(reps_att_ex)
-        # emb_vectors_ex = emb_vectors_ex * reps_att_ex.sigmoid()
-
-        emb_vectors_norm = F.normalize(emb_vectors_ex, p=2, dim=3)
-        distances = torch.sqrt((((emb_vectors_norm - reps_norm_ex) ** 2) * reps_att_ex.sigmoid()).sum(3))
-
-        probs_ori = torch.exp(-(distances) ** 2 / (2.0 * self.sigma ** 2))
-        probs_ori = probs_ori.max(dim=2)[0]
-
-        probs = torch.exp(-(distances) ** 2 / (2.0 * self.sigma ** 2))
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
@@ -101,8 +94,8 @@ class DMLHead(nn.Module):
             cls_score = probs.max(dim=2)[0]
 
         if save_outs:
-            return cls_score, distances, probs_ori, emb_vectors, reps
-        return cls_score, distances
+            return cls_score, distances, emb_vectors, reps
+        return cls_score, distances_att
 
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
@@ -129,12 +122,14 @@ def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, str
 @HEADS.register_module
 class GARetinaDMLHead14(GuidedAnchorHead):
     """Guided-Anchor-based RetinaNet head."""
+
     def __init__(self,
                  num_classes,
                  in_channels,
                  conv_cfg=None,
                  norm_cfg=None,
                  stacked_convs=4,
+                 grad_scale=None,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
@@ -148,6 +143,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
+        self.grad_scale = grad_scale
         super().__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs
@@ -179,6 +175,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
 
+        self.conv_loc = nn.Conv2d(self.feat_channels, 1, 1)
         self.conv_shape = nn.Conv2d(self.feat_channels, self.num_anchors * 2, 1)
 
         self.feature_adaption_cls = FeatureAdaption(
@@ -198,7 +195,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
 
         emb_module = build_emb_module(self.feat_channels, self.cls_emb_head_cfg['emb_channels'],
                                       kernel_size=3, padding=1, stride=1)
-        self.cls_head = DMLHead(emb_module, self.num_classes-1, **self.cls_emb_head_cfg)
+        self.cls_head = DMLHead(emb_module, self.num_classes - 1, **self.cls_emb_head_cfg)
 
     def init_weights(self):
         for m in self.cls_convs:
@@ -210,6 +207,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         self.feature_adaption_reg.init_weights()
 
         bias_cls = bias_init_with_prob(0.01)
+        normal_init(self.conv_loc, std=0.01, bias=bias_cls)
         normal_init(self.conv_shape, std=0.01)
         normal_init(self.retina_reg, std=0.01)
 
@@ -217,26 +215,29 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         cls_feat = x
         reg_feat = x
 
+        if self.training and (self.grad_scale is not None):
+            cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)
+            reg_feat = scale_tensor_gard(reg_feat, self.grad_scale)
+
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
             reg_feat = reg_conv(reg_feat)
 
-        loc_pred = torch.ones((x.size(0), 1, x.size(2), x.size(3)), device=x.device)
-
+        loc_pred = self.conv_loc(cls_feat)
         shape_pred = self.conv_shape(reg_feat)
 
         cls_feat_adp = self.feature_adaption_cls(cls_feat, shape_pred)
         reg_feat_adp = self.feature_adaption_reg(reg_feat, shape_pred)
 
         if not self.training:
-            mask = loc_pred[0] >= self.loc_filter_thr
+            mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr
         else:
             mask = None
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance = self.cls_head(cls_feat_adp)
+        cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:
@@ -284,6 +285,15 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         assert len(featmap_sizes) == len(self.approx_generators)
 
         device = cls_scores[0].device
+
+        # get loc targets
+        loc_targets, loc_weights, loc_avg_factor = ga_loc_target(
+            gt_bboxes,
+            featmap_sizes,
+            self.octave_base_scale,
+            self.anchor_strides,
+            center_ratio=cfg.center_ratio,
+            ignore_ratio=cfg.ignore_ratio)
 
         # get sampled approxes
         approxs_list, inside_flag_list = self.get_sampled_approxs(
@@ -345,6 +355,17 @@ class GARetinaDMLHead14(GuidedAnchorHead):
             num_total_samples=num_total_samples,
             cfg=cfg)
 
+        # get anchor location loss
+        losses_loc = []
+        for i in range(len(loc_preds)):
+            loss_loc = self.loss_loc_single(
+                loc_preds[i],
+                loc_targets[i],
+                loc_weights[i],
+                loc_avg_factor=loc_avg_factor,
+                cfg=cfg)
+            losses_loc.append(loss_loc)
+
         # get anchor shape loss
         losses_shape = []
         for i in range(len(shape_preds)):
@@ -371,6 +392,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_shape_cls=losses_shape,
+            loss_loc=losses_loc,
             loss_emb=losses_emb)
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):

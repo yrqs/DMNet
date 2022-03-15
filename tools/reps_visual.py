@@ -52,12 +52,12 @@ VOC_novel_ids = (
 # checkpoint_file = 'work_dirs/retina_dml3_voc_split1/base_aug/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/retina_dml3_voc_split1/norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/retina_dml3_voc_split1/base_aug/norm/base/epoch_16.pth'
-checkpoint_file = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml9_voc_split2/wo_norm/10shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml9_voc_split2/wo_norm/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml11_voc_split2/wo_norm/256_256/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml6_voc_split2/wo_norm/base/epoch_16.pth'
-# checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/1shot/epoch_4.pth'
+checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/1shot/epoch_4.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/sigma025_alpha03/1shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/10shot/epoch_16.pth'
@@ -290,8 +290,8 @@ if __name__ == '__main__':
     # show_reps(reps, 2)
     # reps_visual(reps)
     # show_emb_vectors()
-    print((reps_ori / reps).var(-1))
-    show_dis_between_reps(reps_ori, VOC_base_ids[0])
-    # show_rep_dims(reps, VOC_base_ids[0])
+    # print((reps_ori / reps).var(-1))
+    # show_dis_between_reps(reps_ori, VOC_base_ids[0])
+    show_rep_dims(reps, VOC_base_ids[0])
     # show_dim_dis_between_reps(reps, CLASSES.index('cat'))
     # show_dim_dis_sum(reps, VOC_base_ids[0])

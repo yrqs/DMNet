@@ -4,16 +4,21 @@ from mmcv.cnn import normal_init
 
 class MLP(nn.Module):
     def __init__(self,
-                 num_layer,
                  in_channels,
-                 out_channels):
+                 out_channels,
+                 hidden_channels=None,
+                 action_function=None):
         super().__init__()
         self.layers = nn.ModuleList()
-        for i in range(num_layer):
-            self.layers.append(nn.Linear(in_channels, out_channels))
-            if i < num_layer-1:
-                self.layers.append(nn.ReLU())
-
+        if hidden_channels is not None:
+            assert isinstance(hidden_channels, tuple)
+            for i, hc in enumerate(hidden_channels):
+                if i == 0:
+                    self.layers.append(nn.Linear(in_channels, hc))
+                else:
+                    self.layers.append(nn.Linear(hidden_channels[i-1], hc))
+                self.layers.append(action_function)
+            self.layers.append(nn.Linear(hidden_channels[-1], out_channels))
         for m in self.layers:
             if isinstance(m, nn.Linear):
                 normal_init(m, std=0.01)
