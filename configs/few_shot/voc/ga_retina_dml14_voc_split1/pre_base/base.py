@@ -18,7 +18,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 split_num = 1
 
@@ -64,6 +64,8 @@ model = dict(
             num_modes=1,
             sigma=0.5,
             cls_norm=False,
+            score_type='weighted',
+            loss_dis='normal',
             base_ids=VOC_base_ids[split_num - 1],
             novel_ids=VOC_novel_ids[split_num - 1],
         ),
@@ -92,7 +94,8 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+        loss_emb_att=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(

@@ -53,7 +53,10 @@ class DMLHead(nn.Module):
             requires_grad=False)
         self.base_ids=base_ids
         self.novel_ids=novel_ids
-        self.scale = Scale(4.0, requires_grad=True)
+        if score_type=='normal':
+            self.scale = Scale(4.0, requires_grad=True)
+        else:
+            self.scale = Scale(1.0, requires_grad=False)
         self.loss_dis = loss_dis
         self.score_type = score_type
         normal_init(self.rep_fc, std=0.01)
@@ -108,7 +111,7 @@ class DMLHead(nn.Module):
         if save_outs:
             return cls_score, distances, emb_vectors, reps
         if self.loss_dis == 'normal':
-            return cls_score, distances
+            return cls_score, distances, None
         elif self.loss_dis == 'att':
             return cls_score, distances_att, None
         elif self.loss_dis == 'normal_att':
@@ -258,11 +261,11 @@ class GARetinaDMLHead14(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
+        cls_score, distance, distance_att = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:
-            return cls_score, bbox_pred, shape_pred, loc_pred, distance
+            return cls_score, bbox_pred, shape_pred, loc_pred, distance, distance_att
         else:
             return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -290,13 +293,14 @@ class GARetinaDMLHead14(GuidedAnchorHead):
             return cls_scores, bbox_preds, shape_preds_reg, loc_preds
 
     @force_fp32(
-        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances'))
+        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances', 'distances_att'))
     def loss(self,
              cls_scores,
              bbox_preds,
              shape_preds,
              loc_preds,
              distances,
+             distances_att,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -409,12 +413,25 @@ class GARetinaDMLHead14(GuidedAnchorHead):
                 num_total_samples=num_total_samples_emb)
             losses_emb.append(loss_emb)
 
-        return dict(
+        loss_dict = dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_shape_cls=losses_shape,
             loss_loc=losses_loc,
             loss_emb=losses_emb)
+
+        if distances_att[0] is not None:
+            losses_emb_att = []
+            for i in range(len(distances)):
+                loss_emb_att = self.loss_emb_att_single(
+                    distances_att[i],
+                    labels_list[i],
+                    label_weights_list[i],
+                    num_total_samples=num_total_samples_emb)
+                losses_emb_att.append(loss_emb_att)
+            loss_dict['loss_emb_att'] = losses_emb_att
+
+        return loss_dict
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):
         if label.dim() == 1:
@@ -427,6 +444,23 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         label_weights_pos = label_weights[label>0]
         label_pos = label[pos_inds].view(-1, 1)
         loss_emb = self.loss_emb(
+            distance_pos,
+            label_pos,
+            label_weights_pos,
+            avg_factor=max(1, num_total_samples))
+        return loss_emb
+
+    def loss_emb_att_single(self, distance, label, label_weights, num_total_samples):
+        if label.dim() == 1:
+            label = label.unsqueeze(0)
+            label_weights = label_weights.unsqueeze(0)
+        distance = distance.view(distance.size(0), distance.size(1), distance.size(2), -1).permute(0, 3, 1, 2)
+        pos_inds = label > 0
+
+        distance_pos = distance[pos_inds]
+        label_weights_pos = label_weights[label>0]
+        label_pos = label[pos_inds].view(-1, 1)
+        loss_emb = self.loss_emb_att(
             distance_pos,
             label_pos,
             label_weights_pos,

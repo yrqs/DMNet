@@ -8,7 +8,7 @@ warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
-imgs_per_gpu = 4
+imgs_per_gpu = 3
 gpu_num = 8
 
 split_num = 1
@@ -132,7 +132,10 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True),
     # dict(type='Expand'),
     # dict(type='MinIoURandomCrop'),
-    dict(type='Resize', img_scale=[(600, 256), (1333, 600)], multiscale_mode='range', keep_ratio=True),
+    dict(type='Resize', img_scale=[
+        (1333, 480), (1333, 512), (1333, 544), (1333, 576), (1333, 608),
+        (1333, 640), (1333, 672), (1333, 704), (1333, 736), (1333, 768),
+        (1333, 800)], multiscale_mode='value', keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -143,7 +146,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 600),
+        img_scale=(1333, 800),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),

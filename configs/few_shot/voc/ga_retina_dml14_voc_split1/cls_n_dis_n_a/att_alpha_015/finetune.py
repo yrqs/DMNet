@@ -1,3 +1,5 @@
+import os
+
 # model settings
 save_outs = False
 shot = 1
@@ -13,12 +15,12 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500 // 8
+warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 8
+gpu_num = 4
 
 model = dict(
     type='RetinaNet',
@@ -40,7 +42,7 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead4',
+        type='GARetinaDMLHead14',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
@@ -49,7 +51,10 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=False,
+            score_type='normal',
+            loss_dis='normal_att',
+        ),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -75,7 +80,8 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+        loss_emb_att=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -123,12 +129,9 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    # dict(type='Expand'),
-    # dict(type='MinIoURandomCrop'),
-    dict(type='Resize', img_scale=[
-        (1333, 480), (1333, 512), (1333, 544), (1333, 576), (1333, 608),
-        (1333, 640), (1333, 672), (1333, 704), (1333, 736), (1333, 768),
-        (1333, 800)], multiscale_mode='value', keep_ratio=True),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
+    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -139,7 +142,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
+        img_scale=(1000, 600),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -202,6 +205,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/multi_scale/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml14_voc_split1/cls_n_dis_n_a/att_alpha_015/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

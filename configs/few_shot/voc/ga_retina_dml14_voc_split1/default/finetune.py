@@ -51,7 +51,10 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=False,
+            score_type='weighted',
+            loss_dis='normal'
+        ),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],

@@ -67,7 +67,7 @@ def summury_voc_finetuneG(dir_base, seed_range):
     results = dict()
     if not isinstance(seed_range, tuple):
         seed_range = (0, seed_range)
-    for sub_dir in sub_dirs[dataset][1:]:
+    for sub_dir in sub_dirs[dataset][1:2]:
         mAP_max_list = []
         novel1_max_list = []
         novel2_max_list = []
@@ -106,4 +106,4 @@ if __name__ == '__main__':
     else:
         dir_base = work_dir_base
     summury_voc_finetune(dir_base)
-    # summury_voc_finetuneG(dir_base, 14)
+    # summury_voc_finetuneG(dir_base, 5)

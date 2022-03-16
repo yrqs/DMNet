@@ -61,6 +61,7 @@ VOC_novel_ids = (
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/sigma025_alpha03/1shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/10shot/epoch_16.pth'
+checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/10shot/epoch_16.pth'
@@ -69,7 +70,7 @@ VOC_novel_ids = (
 # checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1/norm/default/10shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1_old/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1/wo_norm/default/base/epoch_16.pth'
-checkpoint_file = 'work_dirs/ga_retina_dml14_voc_split1/pre_base/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml14_voc_split1/pre_base/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/base/epoch_20.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/30shot/epoch_20.pth'
 
@@ -217,8 +218,8 @@ def show_rep_dims(reps, cls_ids=None):
     scale_ls = range(num_cls)
     label_ls = list(class_names)
     fig = plt.figure()
-    norm = matplotlib.colors.Normalize(vmin=0, vmax=0.4)
-    plt.imshow(torch.abs(reps), cmap='rainbow', norm=norm)
+    norm = matplotlib.colors.Normalize(vmin=-0.4, vmax=0.4)
+    plt.imshow(reps, cmap='rainbow', norm=norm)
     plt.colorbar()
     plt.yticks(scale_ls, label_ls)
     plt.show()
@@ -292,7 +293,7 @@ if __name__ == '__main__':
     # reps_visual(reps)
     # show_emb_vectors()
     # print((reps_ori / reps).var(-1))
-    show_dis_between_reps(reps_ori, VOC_base_ids[0])
+    show_dis_between_reps(reps, VOC_base_ids[0])
     show_rep_dims(reps, VOC_base_ids[0])
     # show_dim_dis_between_reps(reps, CLASSES.index('cat'))
     # show_dim_dis_sum(reps, VOC_base_ids[0])

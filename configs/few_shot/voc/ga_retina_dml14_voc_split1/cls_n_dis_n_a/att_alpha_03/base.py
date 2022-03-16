@@ -13,12 +13,26 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500 // 8
+warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
-lr_base = 0.0001
+lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 8
+gpu_num = 4
+
+split_num = 1
+
+VOC_base_ids = (
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+)
+
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
 
 model = dict(
     type='RetinaNet',
@@ -40,8 +54,8 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead4',
-        num_classes=21,
+        type='GARetinaDMLHead14',
+        num_classes=16,
         in_channels=256,
         stacked_convs=stacked_convs,
         feat_channels=256,
@@ -49,7 +63,12 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=False,
+            score_type='normal',
+            loss_dis='normal_att',
+            base_ids=VOC_base_ids[split_num - 1],
+            novel_ids=VOC_novel_ids[split_num - 1],
+        ),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -75,7 +94,8 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+        loss_emb_att=dict(type='RepMetLoss', alpha=0.3, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -116,7 +136,7 @@ test_cfg = dict(
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
 # dataset settings
-dataset_type = 'VOCDataset'
+dataset_type = 'VOCDatasetBase{}'.format(split_num)
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -125,10 +145,7 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True),
     # dict(type='Expand'),
     # dict(type='MinIoURandomCrop'),
-    dict(type='Resize', img_scale=[
-        (1333, 480), (1333, 512), (1333, 544), (1333, 576), (1333, 608),
-        (1333, 640), (1333, 672), (1333, 704), (1333, 736), (1333, 768),
-        (1333, 800)], multiscale_mode='value', keep_ratio=True),
+    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -139,7 +156,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
+        img_scale=(1000, 600),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -155,28 +172,27 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=train_repeat_times,
+        times=1,
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-        # ann_file=data_root + 'VOC2007/ImageSets/Main/novel_split2_test.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
 
-evaluation = dict(interval=interval, metric='mAP')
+evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
 optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
@@ -188,7 +204,7 @@ lr_config = dict(
     warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
     step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=lr_step[2])
+checkpoint_config = dict(interval=interval)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -202,6 +218,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/multi_scale/base/epoch_16.pth'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

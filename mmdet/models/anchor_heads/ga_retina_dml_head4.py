@@ -145,6 +145,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  stacked_convs=4,
+                 cls_stacked_convs=None,
                  grad_scale=None,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
@@ -156,6 +157,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
                  **kwargs):
         self.stacked_convs = stacked_convs
+        self.cls_stacked_convs = cls_stacked_convs if (cls_stacked_convs is not None) else stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
@@ -170,7 +172,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
 
-        for i in range(self.stacked_convs):
+        for i in range(self.cls_stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
             self.cls_convs.append(
                 ConvModule(
@@ -181,6 +183,9 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                     padding=1,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
+
+        for i in range(self.stacked_convs):
+            chn = self.in_channels if i == 0 else self.feat_channels
             self.reg_convs.append(
                 ConvModule(
                     chn,
