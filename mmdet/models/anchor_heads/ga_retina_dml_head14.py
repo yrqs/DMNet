@@ -33,6 +33,8 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 score_type='normal',
+                 loss_dis='normal',
                  base_ids=None,
                  novel_ids=None,
                  freeze=False):
@@ -51,7 +53,9 @@ class DMLHead(nn.Module):
             requires_grad=False)
         self.base_ids=base_ids
         self.novel_ids=novel_ids
-        self.scale = Scale(3.0, requires_grad=True)
+        self.scale = Scale(4.0, requires_grad=True)
+        self.loss_dis = loss_dis
+        self.score_type = score_type
         normal_init(self.rep_fc, std=0.01)
 
         if freeze:
@@ -84,7 +88,8 @@ class DMLHead(nn.Module):
         dis_l2_att = self.scale(reps_ex.abs()) * dis_l2
         distances = torch.sqrt(dis_l2.sum(3))
         distances_att = torch.sqrt(dis_l2_att.sum(3))
-        probs = torch.exp(-(distances_att)**2/(2.0*self.sigma**2))
+        probs_att = torch.exp(-(distances_att)**2/(2.0*self.sigma**2))
+        probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
 
         if self.cls_norm:
             probs_sumj = probs.sum(2)
@@ -93,10 +98,23 @@ class DMLHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
+        if self.score_type == 'weighted':
+            cls_score = torch.sqrt(cls_score * probs_att.squeeze(2))
+        elif self.score_type == 'att':
+            cls_score = probs_att.squeeze(2)
+        else:
+            assert self.score_type == 'normal'
+
         if save_outs:
             return cls_score, distances, emb_vectors, reps
-        return cls_score, distances_att
-
+        if self.loss_dis == 'normal':
+            return cls_score, distances
+        elif self.loss_dis == 'att':
+            return cls_score, distances_att, None
+        elif self.loss_dis == 'normal_att':
+            return cls_score, distances, distances_att
+        else:
+            assert False
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
     emb_list = []
@@ -135,9 +153,11 @@ class GARetinaDMLHead14(GuidedAnchorHead):
                      num_modes=1,
                      sigma=0.5,
                      cls_norm=False,
+                     loss_dis='normal',
                  ),
                  save_outs=False,
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
+                 loss_emb_att=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
                  **kwargs):
         self.stacked_convs = stacked_convs
         self.conv_cfg = conv_cfg
@@ -146,6 +166,7 @@ class GARetinaDMLHead14(GuidedAnchorHead):
         self.grad_scale = grad_scale
         super().__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
+        self.loss_emb_att = build_loss(loss_emb_att)
         self.save_outs = save_outs
 
     def _init_layers(self):
