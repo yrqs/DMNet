@@ -61,7 +61,7 @@ VOC_novel_ids = (
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/sigma025_alpha03/1shot/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/default/10shot/epoch_16.pth'
-checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
+# checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml17_voc_split1/wo_norm/default/10shot/epoch_16.pth'
@@ -71,6 +71,7 @@ checkpoint_file = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epo
 # checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1_old/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml16_voc_split1/wo_norm/default/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml14_voc_split1/pre_base/base/epoch_16.pth'
+checkpoint_file = 'work_dirs/ga_retina_dml14_voc_split1/cls_n_dis_n_a/att_alpha_03/base/epoch_16.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/base/epoch_20.pth'
 # checkpoint_file = 'work_dirs/ga_retina_dml4_coco/wo_norm/30shot/epoch_20.pth'
 
@@ -217,6 +218,10 @@ def show_rep_dims(reps, cls_ids=None):
     num_cls = reps.shape[0]
     scale_ls = range(num_cls)
     label_ls = list(class_names)
+
+    key_inds = (reps.abs() > 0.2)
+    print(key_inds.sum(-1))
+
     fig = plt.figure()
     norm = matplotlib.colors.Normalize(vmin=-0.4, vmax=0.4)
     plt.imshow(reps, cmap='rainbow', norm=norm)

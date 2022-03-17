@@ -12,9 +12,6 @@ from mmdet.core import (AnchorGenerator, anchor_inside_flags, anchor_target,
                         multi_apply, multiclass_nms)
 
 from ..builder import build_loss
-from ..losses import FocalLoss
-
-import random
 import os
 from mmdet.utils.show_feature import show_dis
 
@@ -35,8 +32,6 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
-                 sigma_key,
-                 key_channels,
                  base_ids=None,
                  novel_ids=None,
                  freeze=False):
@@ -46,8 +41,6 @@ class DMLHead(nn.Module):
         self.output_channels = output_channels
         self.num_modes = num_modes
         self.sigma = sigma
-        self.sigma_key = sigma_key
-        self.key_channels = key_channels
         self.emb_module = emb_module
         self.emb_channels = emb_channels
         self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
@@ -58,7 +51,6 @@ class DMLHead(nn.Module):
         self.base_ids=base_ids
         self.novel_ids=novel_ids
         normal_init(self.rep_fc, std=0.01)
-        # constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
@@ -85,18 +77,36 @@ class DMLHead(nn.Module):
         distances = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
         probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
 
-        reps_detach = reps.squeeze(1).detach().clone()
-        reps_exp1 = reps_detach.unsqueeze(0).expand(reps_detach.size(0), -1, -1)
-        reps_exp2 = reps_detach.unsqueeze(1).expand(-1, reps_detach.size(0), -1)
-        dis_mat = ((reps_exp1-reps_exp2)**2).sum(dim=1)
-        key_channels_ind = dis_mat.sort(dim=1, descending=True)[1][:, :self.key_channels]
-        key_channels_ind_ex = key_channels_ind[None, :, None, :, None, None].expand(
-            emb_vectors_ex.size(0), -1, emb_vectors_ex.size(2), -1, emb_vectors_ex.size(4), emb_vectors_ex.size(5))
+        reps_ex1 = reps.clone().expand(-1, reps.size(0), -1)
+        reps_ex2 = reps.clone().squeeze(1)[None, :, :].expand_as(reps_ex1)
+        reps_dis_mat = torch.sqrt(((reps_ex1.detach() - reps_ex2.detach()) ** 2).sum(-1))
+        # print(reps_dis_mat)
+        reps_dis_mat = reps_dis_mat[reps_dis_mat > 1e-10].reshape(reps.size(0), -1)
+        # print(reps_dis_mat.shape)
+        reps_dis_min = reps_dis_mat.min(dim=-1)[0]
+        reps_diff_probs = torch.exp(-(reps_dis_min)**2/(2.0*self.sigma**2))
 
-        emb_vectors_ex_key = torch.gather(emb_vectors_ex, 3, key_channels_ind_ex)
-        reps_ex_key = torch.gather(reps_ex, 3, key_channels_ind_ex)
-        distances_key = torch.sqrt(((emb_vectors_ex_key - reps_ex_key)**2).sum(3))
-        # probs_key = torch.exp(-(distances_key)**2/(2.0*self.sigma_key**2)).squeeze(2)
+        # if not self.training:
+        #     emb_vectors_flat = emb_vectors.permute(0, 2, 3, 1).flatten(0, 2)
+        #     probs_flat = probs.max(dim=2)[0].permute(0, 2, 3, 1).flatten(0, 2).max(1)[0]
+        #     ind_max = probs_flat.max(0)[1]
+        #     print('max_probs: ', probs_flat[ind_max])
+        #     ev_max = emb_vectors_flat[ind_max, :]
+        #     show_dis(ev_max[None, :], (0, 0.4))
+        #     ev_max_att = ev_max[None, :].expand_as(reps.squeeze(1)) * reps.squeeze(1)
+        #     ev_max_att = F.normalize(ev_max_att, p=2, dim=1)
+        #     show_dis(ev_max_att, (0, 0.4))
+        #     dis_l2 = (ev_max.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
+        #     show_dis(dis_l2, (0, 0.3))
+        #     print('dis_l2    : ', torch.exp(-torch.sqrt(dis_l2.sum(-1))**2 / (2*self.sigma**2)))
+        #     dis_l2_att = (ev_max_att - reps.squeeze(1))**2
+        #     show_dis(dis_l2_att, (0, 0.3))
+        #     print('dis_l2_att: ', torch.exp(-torch.sqrt(dis_l2_att.sum(-1))**2 / (2*self.sigma**2)))
+        #     ind_min = probs_flat.min(0)[1]
+        #     print('min_probs: ', probs_flat[ind_min])
+        #     ev_min = emb_vectors_flat[ind_min, :]
+        #     dis_l2 = (ev_min.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
+        #     show_dis(dis_l2, (0, 0.3))
 
         if self.cls_norm:
             probs_sumj = probs.sum(2)
@@ -105,11 +115,9 @@ class DMLHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        # cls_score = cls_score * probs_key
-
         if save_outs:
             return cls_score, distances, emb_vectors, reps
-        return cls_score, distances, distances_key
+        return cls_score, distances, reps_diff_probs
 
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
@@ -142,19 +150,19 @@ class GARetinaDMLHead16(GuidedAnchorHead):
                  conv_cfg=None,
                  norm_cfg=None,
                  stacked_convs=4,
+                 cls_stacked_convs=None,
                  grad_scale=None,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
                      sigma=0.5,
                      cls_norm=False,
-                     sigma_key=0.25,
-                     key_channels=128//4,
                  ),
                  save_outs=False,
                  loss_emb=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0),
                  **kwargs):
         self.stacked_convs = stacked_convs
+        self.cls_stacked_convs = cls_stacked_convs if (cls_stacked_convs is not None) else stacked_convs
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
@@ -169,7 +177,7 @@ class GARetinaDMLHead16(GuidedAnchorHead):
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
 
-        for i in range(self.stacked_convs):
+        for i in range(self.cls_stacked_convs):
             chn = self.in_channels if i == 0 else self.feat_channels
             self.cls_convs.append(
                 ConvModule(
@@ -180,6 +188,9 @@ class GARetinaDMLHead16(GuidedAnchorHead):
                     padding=1,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
+
+        for i in range(self.stacked_convs):
+            chn = self.in_channels if i == 0 else self.feat_channels
             self.reg_convs.append(
                 ConvModule(
                     chn,
@@ -252,11 +263,11 @@ class GARetinaDMLHead16(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance, distance_key = self.cls_head(cls_feat_adp, self.grad_scale)
+        cls_score, distance, reps_diff_probs = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:
-            return cls_score, bbox_pred, shape_pred, loc_pred, distance, distance_key
+            return cls_score, bbox_pred, shape_pred, loc_pred, distance, reps_diff_probs
         else:
             return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -284,14 +295,14 @@ class GARetinaDMLHead16(GuidedAnchorHead):
             return cls_scores, bbox_preds, shape_preds_reg, loc_preds
 
     @force_fp32(
-        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances', 'distances_key'))
+        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances', 'reps_diff_probs'))
     def loss(self,
              cls_scores,
              bbox_preds,
              shape_preds,
              loc_preds,
              distances,
-             distances_key,
+             reps_diff_probs,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -403,14 +414,15 @@ class GARetinaDMLHead16(GuidedAnchorHead):
                 num_total_samples=num_total_samples_emb)
             losses_emb.append(loss_emb)
 
-        losses_emb_key = []
-        for i in range(len(distances)):
-            loss_emb_key = self.loss_emb_single(
-                distances_key[i],
-                labels_list[i],
-                label_weights_list[i],
-                num_total_samples=num_total_samples_emb)
-            losses_emb_key.append(loss_emb_key)
+        # loss_reps_dis = F.nll_loss(reps_diff_probs[0][:, None].log(), torch.zeros(reps_diff_probs[0].shape).long().to(reps_diff_probs[0].device), None, None, -100, None, 'none').mean()
+        loss_reps_dis = (-torch.sub(1., reps_diff_probs[0]).log()).mean(())
+
+        print(losses_cls)
+        print(losses_bbox)
+        print(losses_shape)
+        print(losses_loc)
+        print(losses_emb)
+        print(loss_reps_dis)
 
         return dict(
             loss_cls=losses_cls,
@@ -418,7 +430,7 @@ class GARetinaDMLHead16(GuidedAnchorHead):
             loss_shape=losses_shape,
             loss_loc=losses_loc,
             loss_emb=losses_emb,
-            loss_emb_key=losses_emb_key,
+            loss_reps_dis=[loss_reps_dis],
         )
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):

@@ -1,10 +1,8 @@
-import os
-
 # model settings
 save_outs = False
 shot = 1
 shot_idx = [1, 2, 3, 5, 10]
-train_repeat_times = [20, 20, 20, 20, 15]
+train_repeat_times = [30, 25, 20, 20, 15]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -15,12 +13,12 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500
+warmup_iters = 100
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 model = dict(
     type='RetinaNet',
@@ -47,6 +45,7 @@ model = dict(
         in_channels=256,
         stacked_convs=stacked_convs,
         feat_channels=256,
+        grad_scale=0.1,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
@@ -81,7 +80,7 @@ model = dict(
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
-        loss_emb_att=dict(type='RepMetLoss', alpha=0.15, loss_weight=1.0)))
+        loss_emb_att=dict(type='RepMetLoss', alpha=0.3, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -158,7 +157,7 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=train_repeat_times,
+        times=train_repeat_times[shot_idx.index(shot)],
         dataset=dict(
             type=dataset_type,
             ann_file=[
@@ -205,6 +204,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml14_voc_split1/cls_n_dis_n_a/att_alpha_015/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml14_voc_split1/cls_n_dis_n_a/att_alpha_03/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

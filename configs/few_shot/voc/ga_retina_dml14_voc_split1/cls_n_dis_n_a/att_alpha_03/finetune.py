@@ -1,10 +1,8 @@
-import os
-
 # model settings
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [20, 20, 20, 20, 15]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -15,12 +13,12 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500
-lr_step = [10, 14, 16]
+warmup_iters = 100
+lr_step = [8, 12, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 model = dict(
     type='RetinaNet',
@@ -158,7 +156,7 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=train_repeat_times,
+        times=train_repeat_times[shot_idx.index(shot)],
         dataset=dict(
             type=dataset_type,
             ann_file=[

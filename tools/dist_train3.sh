@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 DATASET='voc'
-MODEL_NAME=ga_retina_dml14_voc_split1
-PARAMETER=cls_n_dis_n_a/att_alpha_03
+MODEL_NAME=ga_retina_dml4_voc_split1
+PARAMETER=wo_norm/sigma06_alpha015
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'
@@ -28,7 +28,7 @@ CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_nod
     $(dirname "$0")/finetune.py $CONFIG --launcher pytorch ${@:3} \
     --validate \
     --shot $i \
-    --work_dir $WORK_DIR_BASE$i'shot' \
+    --work_dir $WORK_DIR_BASE'ind2/'$i'shot' \
     && sleep 5s
 done
 

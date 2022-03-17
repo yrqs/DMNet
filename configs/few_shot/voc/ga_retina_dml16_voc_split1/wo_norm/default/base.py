@@ -8,7 +8,7 @@ warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
-imgs_per_gpu = 2
+imgs_per_gpu = 4
 gpu_num = 8
 
 split_num = 1
@@ -55,8 +55,6 @@ model = dict(
             num_modes=1,
             sigma=0.5,
             cls_norm=False,
-            sigma_key=0.25,
-            key_channels=128 // 4,
             base_ids=VOC_base_ids[split_num-1],
             novel_ids=VOC_novel_ids[split_num-1],
         ),
@@ -193,7 +191,7 @@ lr_config = dict(
     warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
     step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=lr_step[2])
+checkpoint_config = dict(interval=interval)
 # yapf:disable
 log_config = dict(
     interval=50,

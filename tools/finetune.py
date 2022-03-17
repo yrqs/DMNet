@@ -93,8 +93,8 @@ def main():
             ann_file = [ann_file]
         for i in range(len(ann_file)):
             ann_file[i] = ann_file[i].replace('nshot', '{}shot'.format(args.shot))
-        shot_idx = [1, 2, 3, 5, 10].index(args.shot)
-        train_repeat_times = [30, 25, 15, 15, 10][shot_idx]
+        shot_idx = cfg.shot_idx.index(args.shot)
+        train_repeat_times = cfg.train_repeat_times[shot_idx]
         cfg.data['train']['times'] = train_repeat_times
 
     if args.autoscale_lr:

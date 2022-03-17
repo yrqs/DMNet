@@ -1,8 +1,8 @@
 # model settings
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [30, 25, 20, 15, 10]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -13,7 +13,7 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500 // 4
+warmup_iters = 100
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
@@ -49,10 +49,7 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False,
-            sigma_key=0.25,
-            key_channels=128 // 4,
-        ),
+            cls_norm=False),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
