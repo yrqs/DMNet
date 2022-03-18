@@ -3,8 +3,8 @@ import os
 # model settings
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [30, 25, 20, 15, 10]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3

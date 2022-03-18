@@ -1,11 +1,6 @@
 # model settings
 
 save_outs = False
-shot = 1
-shot_idx = [1, 2, 3, 5, 10]
-train_repeat_times = [30, 25, 20, 15, 10]
-freeze = False
-freeze1 = False
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
@@ -15,12 +10,23 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
-warmup_iters = 500
-lr_step = [10, 14, 16]
-interval = 4
-lr_base = 0.0001
 imgs_per_gpu = 2
 gpu_num = 4
+
+split_num = 1
+
+VOC_base_ids = (
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+)
+
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
+
 
 model = dict(
     type='RetinaNet',
@@ -43,7 +49,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLNegHead5',
-        num_classes=21,
+        num_classes=16,
         in_channels=256,
         stacked_convs=stacked_convs,
         neg_sample_thresh=0.1,
@@ -57,9 +63,10 @@ model = dict(
             cls_norm=False,
             beta=0.3,
             neg_num_modes=3,
-            neg_detach=False,
+            neg_detach=True,
             rep_detach=False,
-        ),
+            base_ids=VOC_base_ids[split_num-1],
+            novel_ids=VOC_novel_ids[split_num-1],),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -70,7 +77,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.01,
+        loc_filter_thr=0.1,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -124,19 +131,18 @@ test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
-    # nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
+    # nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
-# dataset settings
-dataset_type = 'VOCDataset'
+dataset_type = 'VOCDatasetBase{}'.format(split_num)
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='LoadImageFromFile', to_float32=True),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Expand'),
-    dict(type='MinIoURandomCrop'),
+    # dict(type='Expand'),
+    # dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
@@ -159,49 +165,45 @@ test_pipeline = [
             dict(type='Collect', keys=['img']),
         ])
 ]
+
 data = dict(
     imgs_per_gpu=imgs_per_gpu,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=train_repeat_times,
+        times=1,
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # ann_file=[
-        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
-        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
-        # ],
-        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
 
-evaluation = dict(interval=interval, metric='mAP')
+evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=warmup_iters,
+    warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+    step=[10, 14])
+checkpoint_config = dict(interval=16)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -211,10 +213,11 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = lr_step[2]
+total_epochs = 16
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg5_voc_split1/default/base/epoch_16.pth'
+load_from = None
+# resume_from = 'work_dirs/ga_retina_dml3_s2_fpn_256_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_8.pth'
 resume_from = None
 workflow = [('train', 1)]

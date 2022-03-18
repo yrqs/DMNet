@@ -31,26 +31,30 @@ class DMLNegHead(nn.Module):
                  cls_norm,
                  beta=0.3,
                  neg_num_modes=2,
+                 base_ids=None,
+                 novel_ids=None,
                  freeze=False):
         assert num_modes==1
         super().__init__()
+        self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else output_channels
         self.output_channels = output_channels
         self.num_modes = num_modes
         self.sigma = sigma
         self.emb_module = emb_module
         self.emb_channels = emb_channels
-        self.rep_fc = nn.Linear(1, output_channels * num_modes * emb_channels[-1])
+        self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
         self.beta = beta
         self.neg_num_modes = neg_num_modes
         self.representations = nn.Parameter(
-            torch.FloatTensor(self.output_channels, self.num_modes, self.emb_channels[-1]),
+            torch.FloatTensor(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
         self.neg_offset_fc = nn.Linear(self.emb_channels[-1], self.emb_channels[-1] * neg_num_modes)
+        self.base_ids=base_ids
+        self.novel_ids=novel_ids
 
         normal_init(self.rep_fc, std=0.01)
         normal_init(self.neg_offset_fc, std=0.01)
-        # constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
@@ -63,14 +67,20 @@ class DMLNegHead(nn.Module):
 
         if self.training:
             reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
-            reps  = reps.view(self.output_channels, self.num_modes, self.emb_channels[-1])
+            reps  = reps.view(self.num_reps, self.num_modes, self.emb_channels[-1])
             reps = F.normalize(reps, p=2, dim=2)
             self.representations.data = reps.detach()
         else:
             reps = self.representations.detach()
 
-        neg_offset = self.neg_offset_fc(reps.squeeze(1)).view(reps.size(0), self.neg_num_modes, reps.size(-1))
-        reps_neg = neg_offset + reps.expand_as(neg_offset)
+        neg_offset = self.neg_offset_fc(reps.squeeze(1).abs()).view(reps.size(0), self.neg_num_modes, reps.size(-1))
+
+        if self.base_ids is not None:
+            reps = reps[self.base_ids, :, :]
+            neg_offset = neg_offset[self.base_ids, :, :]
+
+        reps_neg = neg_offset + reps.abs().expand_as(neg_offset)
+        reps_neg = reps_neg * reps.sign().expand_as(neg_offset)
         reps_neg = F.normalize(reps_neg, p=2, dim=2)
 
         if self.training and self.output_channels > 20:
@@ -150,7 +160,7 @@ class GARetinaDMLNegHead4(GuidedAnchorHead):
                  neg_sample_thresh=0.2,
                  pos_sub_neg_thresh=0.1,
                  alpha_hn=0.15,
-                 neg_hn_ratio=3,
+                 neg_hn_ratio=1,
                  cls_emb_head_cfg=dict(emb_channels=(256, 128),
                                        num_modes=1,
                                        sigma=0.5,
@@ -460,7 +470,7 @@ class GARetinaDMLNegHead4(GuidedAnchorHead):
         num_neg_hn_all = max(1, sum(num_neg_hn_list))
 
         losses_pos_hn = [_ / num_pos_hn_all for _ in losses_pos_hn]
-        losses_pos_hnp = [_ / num_pos_hn_all for _ in losses_pos_hnp]
+        losses_pos_hnp = [_ / max(num_total_samples_emb, 1) for _ in losses_pos_hnp]
         losses_neg_hn = [_ / num_neg_hn_all for _ in losses_neg_hn]
 
         return dict(
@@ -475,8 +485,11 @@ class GARetinaDMLNegHead4(GuidedAnchorHead):
         )
 
     def loss_emb_neg_single(self, distance, neg_distance, labels, prob_ori, cls_score):
-        distance = distance.flatten(3).permute(0, 3, 1, 2).flatten(0, 1).squeeze(-1)
-        neg_distance = neg_distance.flatten(3).permute(0, 3, 1, 2).min(dim=-1, keepdim=True)[0].flatten(0, 1).squeeze(-1)
+        distance = distance.flatten(3).permute(0, 3, 1, 2).flatten(0, 1)
+        neg_distance = neg_distance.flatten(3).permute(0, 3, 1, 2).min(dim=-1, keepdim=True)[0].flatten(0, 1)
+
+        distance_cat = torch.cat([distance, neg_distance], dim=-1)
+
         prob_ori = prob_ori.clone().detach()
         prob_ori = prob_ori.permute(0, 2, 3, 1).flatten(0, 2)
         cls_score = cls_score.clone().detach()
@@ -492,70 +505,47 @@ class GARetinaDMLNegHead4(GuidedAnchorHead):
         if pos_inds.any():
             prob_ori_pos = prob_ori[pos_inds]
             cls_score_pos = cls_score[pos_inds]
-            neg_distance_pos = neg_distance[pos_inds]
-            distance_pos = distance[pos_inds]
+            distance_cat_pos = distance_cat[pos_inds]
             labels_oh_pos = labels_oh[pos_inds]
-            prob_ori_pos_gt = prob_ori_pos[labels_oh_pos]
+
             prob_ori_pos_other = prob_ori_pos.clone()
             prob_ori_pos_other[labels_oh_pos] = -1.
             prob_ori_pos_other_max_value, prob_ori_pos_other_max_ind = prob_ori_pos_other.max(dim=-1)
-            pos_hn_inds = prob_ori_pos_other_max_value > (prob_ori_pos_gt - self.pos_sub_neg_thresh)
-
-            # cls_score_pos_gt = cls_score_pos[labels_oh_pos]
-            # cls_score_pos_other = cls_score_pos.clone()
-            # cls_score_pos_other[labels_oh_pos] = -1.
-            # cls_score_pos_other_max_value, cls_score_pos_other_max_ind = cls_score_pos_other.max(dim=-1)
-            # pos_hn_inds_strict = cls_score_pos_other_max_value > (cls_score_pos_gt - self.pos_sub_neg_thresh)
-
-            # print(pos_hn_inds.shape)
-            # print(pos_hn_inds_strict.shape)
+            pos_hn_inds = prob_ori_pos_other_max_value > self.neg_sample_thresh
 
             if pos_hn_inds.any():
-                neg_distance_pos_hn = neg_distance_pos[pos_hn_inds]
-                distance_pos_hn = distance_pos[pos_hn_inds]
+                distance_cat_pos_hn = distance_cat_pos[pos_hn_inds]
                 pos_hn_labels = prob_ori_pos_other_max_ind[pos_hn_inds]
-                # print(neg_distance_pos_hn.shape)
-                # print(distance_pos_hn.shape)
-                # print(pos_hn_labels.shape)
                 hn_labels_oh = F.one_hot(pos_hn_labels, num_classes=self.num_classes-1).byte()
-                # print(hn_labels_oh.shape)
-                loss_pos_hn = F.relu(neg_distance_pos_hn[hn_labels_oh] - distance_pos_hn[hn_labels_oh] + self.alpha_hn)
-                # print(loss_pos_hn.shape)
-                # print('===========')
-                # weights = loss_pos_hn.new_full(loss_pos_hn.size(), 0.1)
-                # weights[pos_hn_inds_strict] = 1.
-                # loss_pos_hn = (loss_pos_hn * weights).sum()
+                distance_cat_pos_hn = distance_cat_pos_hn[hn_labels_oh]
+                loss_pos_hn = F.relu(distance_cat_pos_hn[:, 1] - distance_cat_pos_hn[:, 0] + self.alpha_hn)
                 loss_pos_hn = loss_pos_hn.sum()
-
-                labels_oh_pos_hn = labels_oh_pos[pos_hn_inds]
-                loss_pos_hnp = F.relu(distance_pos_hn[labels_oh_pos_hn] - neg_distance_pos_hn[labels_oh_pos_hn] + self.alpha_hn)
                 num_pos_hn = pos_hn_inds.sum()
-                # num_pos_hn = max(int(pos_hn_inds_strict.sum()), 1)
             else:
-                loss_pos_hnp = torch.zeros(1).to(distance.device)
                 loss_pos_hn = torch.zeros(1).to(distance.device)
                 num_pos_hn = 0
+
+            distance_cat_pos_hnp = distance_cat_pos[labels_oh_pos]
+            loss_pos_hnp = F.relu(distance_cat_pos_hnp[:, 0] - distance_cat_pos_hnp[:, 1] + self.loss_emb.alpha)
+
         else:
             loss_pos_hnp = torch.zeros(1).to(distance.device)
             loss_pos_hn = torch.zeros(1).to(distance.device)
             num_pos_hn = 0
-        # loss_pos_hn = torch.zeros(1).to(distance.device)
-        # num_pos_hn = 0
 
         neg_inds = (labels == 0)
         # loss_neg_hn
         if neg_inds.any():
             prob_ori_neg = prob_ori[neg_inds]
-            neg_distance_neg = neg_distance[neg_inds]
-            distance_neg = distance[neg_inds]
+            distance_cat_neg = distance_cat[neg_inds]
             prob_ori_neg_max_value, prob_ori_neg_max_ind = prob_ori_neg.max(dim=-1)
             neg_hn_inds = prob_ori_neg_max_value > self.neg_sample_thresh
             if neg_hn_inds.any():
-                neg_distance_neg_hn = neg_distance_neg[neg_hn_inds]
-                distance_neg_hn = distance_neg[neg_hn_inds]
+                distance_cat_neg_hn = distance_cat_neg[neg_hn_inds]
                 neg_hn_labels = prob_ori_neg_max_ind[neg_hn_inds]
                 hn_labels_oh = F.one_hot(neg_hn_labels, num_classes=self.num_classes-1).byte()
-                loss_neg_hn = F.relu(neg_distance_neg_hn[hn_labels_oh] - distance_neg_hn[hn_labels_oh] + self.alpha_hn)
+                distance_cat_neg_hn = distance_cat_neg_hn[hn_labels_oh]
+                loss_neg_hn = F.relu(distance_cat_neg_hn[:, 1] - distance_cat_neg_hn[:, 0] + self.alpha_hn)
                 num_neg_hn = min(loss_neg_hn.size(0), self.neg_hn_ratio * pos_inds.sum())
                 loss_neg_hn = loss_neg_hn.sort(dim=0, descending=True)[0][:num_neg_hn]
                 loss_neg_hn = loss_neg_hn.sum()

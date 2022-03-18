@@ -35,6 +35,7 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 weighted_score=False,
                  base_ids=None,
                  novel_ids=None,
                  freeze=False):
@@ -48,6 +49,7 @@ class DMLHead(nn.Module):
         self.emb_channels = emb_channels
         self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
+        self.weighted_score = weighted_score
         self.representations = nn.Parameter(
             torch.FloatTensor(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
@@ -102,13 +104,18 @@ class DMLHead(nn.Module):
         #     ev_min = emb_vectors_flat[ind_min, :]
         #     dis_l2 = (ev_min.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
         #     show_dis(dis_l2, (0, 0.3))
-
-        if self.cls_norm:
+        if self.weighted_score:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
             cls_score = probs_sumj / probs_sumij
+            cls_score = torch.sqrt(cls_score * probs.max(dim=2)[0])
         else:
-            cls_score = probs.max(dim=2)[0]
+            if self.cls_norm:
+                probs_sumj = probs.sum(2)
+                probs_sumij = probs_sumj.sum(1, keepdim=True)
+                cls_score = probs_sumj / probs_sumij
+            else:
+                cls_score = probs.max(dim=2)[0]
 
         if save_outs:
             return cls_score, distances, emb_vectors, reps

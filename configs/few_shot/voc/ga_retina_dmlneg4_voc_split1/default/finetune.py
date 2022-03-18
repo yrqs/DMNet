@@ -2,8 +2,8 @@
 
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [30, 25, 20, 15, 10]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -20,7 +20,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 model = dict(
     type='RetinaNet',
@@ -56,7 +56,7 @@ model = dict(
             sigma=0.5,
             cls_norm=False,
             beta=0.3,
-            neg_num_modes=2),
+            neg_num_modes=3),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,

@@ -10,6 +10,23 @@ stacked_convs = 2
 alpha = 0.15
 neg_alpha = 0.1
 
+imgs_per_gpu = 2
+
+split_num = 1
+
+VOC_base_ids = (
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+)
+
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
+
+
 model = dict(
     type='RetinaNet',
     pretrained='torchvision://resnet101',
@@ -31,7 +48,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLNegHead4',
-        num_classes=21,
+        num_classes=16,
         in_channels=256,
         stacked_convs=stacked_convs,
         neg_sample_thresh=0.2,
@@ -44,7 +61,9 @@ model = dict(
             sigma=0.5,
             cls_norm=False,
             beta=0.3,
-            neg_num_modes=2),
+            neg_num_modes=3,
+            base_ids=VOC_base_ids[split_num-1],
+            novel_ids=VOC_novel_ids[split_num-1],),
         feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
@@ -112,7 +131,7 @@ test_cfg = dict(
     # nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
-dataset_type = 'VOCDataset'
+dataset_type = 'VOCDatasetBase{}'.format(split_num)
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -145,7 +164,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    imgs_per_gpu=2,
+    imgs_per_gpu=imgs_per_gpu,
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
@@ -153,37 +172,26 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-            # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-            # img_prefix=data_root + 'VOC2007/',
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # ann_file=[
-        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
-        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
-        # ],
-        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        # ann_file='mytest/test_1img.txt',
-        # ann_file='mytest/test_1img_bird.txt',
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
-        # ann_file='mytest/VOC2007/ImageSets/test_1img_crop.txt',
-        # img_prefix='mytest/VOC2007',
         pipeline=test_pipeline))
 
 evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=0.00025*2*4, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*imgs_per_gpu*8, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(

@@ -57,8 +57,8 @@ model = dict(
             cls_norm=False,
             beta=0.3,
             neg_num_modes=3,
-            neg_detach=False,
-            rep_detach=False,
+            neg_detach=True,
+            rep_detach=True,
         ),
         feat_channels=256,
         octave_base_scale=4,
@@ -215,6 +215,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg5_voc_split1/default/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dmlneg5_voc_split1/neg_rep_detach/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

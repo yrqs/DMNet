@@ -1,5 +1,4 @@
 # model settings
-
 save_outs = False
 shot = 1
 shot_idx = [1, 2, 3, 5, 10]
@@ -13,14 +12,13 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
-neg_alpha = 0.1
 
 warmup_iters = 500
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 1
 
 model = dict(
     type='RetinaNet',
@@ -42,25 +40,17 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLNegHead5',
+        type='GARetinaDMLHead4',
         num_classes=21,
         in_channels=256,
         stacked_convs=stacked_convs,
-        neg_sample_thresh=0.1,
-        pos_sub_neg_thresh=0.4,
-        alpha_hn=0.1,
-        neg_hn_ratio=3,
+        feat_channels=256,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
             cls_norm=False,
-            beta=0.3,
-            neg_num_modes=3,
-            neg_detach=False,
-            rep_detach=False,
-        ),
-        feat_channels=256,
+            weighted_score=True),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -86,8 +76,7 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
-    ))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -124,7 +113,7 @@ test_cfg = dict(
     nms_pre=1000,
     min_bbox_size=0,
     score_thr=0.05,
-    # nms=dict(type='soft_nms', iou_thr=0.4, min_score=0.0001),
+    # nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
 # dataset settings
@@ -176,15 +165,11 @@ data = dict(
     val=dict(
         type=dataset_type,
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        # ann_file=data_root + 'VOC2007/ImageSets/Main/novel_split2_test.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # ann_file=[
-        #     data_root + 'VOC2007/ImageSets/Main/trainval_1shot_novel_standard.txt',
-        #     data_root + 'VOC2012/ImageSets/Main/trainval_1shot_novel_standard.txt'
-        # ],
-        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
@@ -201,7 +186,7 @@ lr_config = dict(
     warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
     step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+checkpoint_config = dict(interval=lr_step[2])
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -215,6 +200,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dmlneg5_voc_split1/default/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/weighted_score/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]
