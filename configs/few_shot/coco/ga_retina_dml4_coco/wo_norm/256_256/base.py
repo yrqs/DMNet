@@ -14,11 +14,17 @@ stacked_convs = 2
 alpha = 0.15
 
 warmup_iters = 500
-lr_step = [10, 14, 16]
+lr_step = [14, 18, 20]
 interval = 4
 lr_base = 0.00025
-imgs_per_gpu = 1
-gpu_num = 8
+imgs_per_gpu = 2
+gpu_num = 4
+
+base_ids = (7, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41,
+            42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 59, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
+            73, 74, 75, 76, 77, 78, 79)
+
+novel_ids = (4, 1, 14, 8, 39, 5, 2, 15, 56, 19, 60, 16, 17, 3, 0, 58, 18, 57, 6, 62)
 
 model = dict(
     type='RetinaNet',
@@ -41,7 +47,7 @@ model = dict(
         save_outs=save_outs),
     bbox_head=dict(
         type='GARetinaDMLHead4',
-        num_classes=81,
+        num_classes=61,
         in_channels=256,
         stacked_convs=stacked_convs,
         feat_channels=256,
@@ -49,7 +55,10 @@ model = dict(
             emb_channels=(256, 256),
             num_modes=1,
             sigma=0.5,
-            cls_norm=False),
+            cls_norm=False,
+            base_ids=base_ids,
+            novel_ids=novel_ids,
+        ),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -116,7 +125,7 @@ test_cfg = dict(
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
 # dataset settings
-dataset_type = 'CocoDataset'
+dataset_type = 'CocoDatasetBase'
 data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -153,7 +162,7 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        fixed_cls_idx=True,
+        # fixed_cls_idx=True,
         ann_file=[data_root + 'annotations/instances_train2014_base.json',
                   data_root + 'annotations/instances_valminusminival2014_base.json',
                   ],
@@ -161,14 +170,14 @@ data = dict(
         pipeline=train_pipeline),
     val=dict(
         type=dataset_type,
-        fixed_cls_idx=True,
+        # fixed_cls_idx=True,
         # ann_file=data_root + 'annotations/instances_minival2014_base.json',
         ann_file=data_root + 'annotations/instances_minival2014.json',
         img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        fixed_cls_idx=True,
+        # fixed_cls_idx=True,
         # ann_file=data_root + 'annotations/instances_minival2014_base.json',
         # ann_file=data_root + 'annotations/instances_minival2014.json',
         # img_prefix=data_root + 'images/trainval2014/',

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 DATASET='voc'
-MODEL_NAME=ga_retina_dmlneg5_voc_split1
-PARAMETER=neg_detach
+MODEL_NAME=ga_retina_dml4_voc_split1
+PARAMETER=wo_norm/default
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'

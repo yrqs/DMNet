@@ -108,7 +108,7 @@ class DMLHead(nn.Module):
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
             cls_score = probs_sumj / probs_sumij
-            cls_score = torch.sqrt(cls_score * probs.max(dim=2)[0])
+            cls_score = cls_score * probs.max(dim=2)[0]
         else:
             if self.cls_norm:
                 probs_sumj = probs.sum(2)

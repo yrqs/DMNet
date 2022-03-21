@@ -13,7 +13,6 @@ from .underwater import Underwater
 from .voc2uw20 import VOC2UW20
 from .voc2coco import VOC2Coco
 
-from .coco_fs import CocoDataset10s, CocoDataset5s, CocoDataset1s, CocoDataset30s, CocoDatasetBase
 from .coco_xml import CocoXml10s, CocoXml3s
 from .voc_coco import VOCCOCODataset
 
@@ -22,6 +21,5 @@ __all__ = [
     'CityscapesDataset', 'GroupSampler', 'DistributedGroupSampler',
     'build_dataloader', 'ConcatDataset', 'RepeatDataset', 'WIDERFaceDataset',
     'DATASETS', 'build_dataset', 'Underwater', 'VOC2UW20', 'VOC2Coco',
-    'CocoDataset10s', 'CocoDataset5s', 'CocoDataset1s', 'CocoDataset30s', 'CocoDatasetBase',
     'CocoXml10s', 'CocoXml3s', 'VOCCOCODataset'
 ]

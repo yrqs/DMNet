@@ -31,6 +31,7 @@ class DMLNegHead(nn.Module):
                  cls_norm,
                  beta=0.3,
                  neg_num_modes=3,
+                 rep_neg_norm=True,
                  neg_detach=False,
                  rep_detach=False,
                  base_ids=None,
@@ -47,6 +48,7 @@ class DMLNegHead(nn.Module):
         self.cls_norm = cls_norm
         self.beta = beta
         self.neg_num_modes = neg_num_modes
+        self.rep_neg_norm = rep_neg_norm
         self.neg_detach = neg_detach
         self.rep_detach = rep_detach
         self.base_ids = base_ids
@@ -85,7 +87,8 @@ class DMLNegHead(nn.Module):
         neg_bias = self.neg_bias(input_reps).view(reps.size(0), self.neg_num_modes, reps.size(-1))
 
         reps_neg = input_reps.unsqueeze(1).expand_as(neg_weight) * neg_weight + neg_bias
-        reps_neg = F.normalize(reps_neg, p=2, dim=2)
+        if self.rep_neg_norm:
+            reps_neg = F.normalize(reps_neg, p=2, dim=2)
 
         if self.base_ids is not None:
             reps = reps[self.base_ids, :, :]

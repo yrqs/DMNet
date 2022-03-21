@@ -49,10 +49,7 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=True,
-            sigma_key=0.25,
-            key_channels=128 // 4,
-        ),
+            cls_norm=False),
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -202,6 +199,6 @@ total_epochs = lr_step[2]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
-load_from = 'work_dirs/ga_retina_dml16_voc_split1/norm/default/base/epoch_16.pth'
+load_from = 'work_dirs/ga_retina_dml16_voc_split1/wo_norm/default/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

@@ -2,7 +2,7 @@
 
 DATASET='voc'
 MODEL_NAME=ga_retina_dmlneg5_voc_split1
-PARAMETER=default
+PARAMETER=neg_rep_detach/wo_rep_neg_norm
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'

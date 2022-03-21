@@ -54,9 +54,7 @@ model = dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
-            cls_norm=True,
-            sigma_key=0.25,
-            key_channels=128 // 4,
+            cls_norm=False,
             base_ids=VOC_base_ids[split_num-1],
             novel_ids=VOC_novel_ids[split_num-1],
         ),
@@ -193,7 +191,7 @@ lr_config = dict(
     warmup_iters=warmup_iters,
     warmup_ratio=1.0 / 3,
     step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=lr_step[2])
+checkpoint_config = dict(interval=interval)
 # yapf:disable
 log_config = dict(
     interval=50,

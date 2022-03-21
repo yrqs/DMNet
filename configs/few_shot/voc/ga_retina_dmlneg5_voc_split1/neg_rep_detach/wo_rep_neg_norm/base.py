@@ -1,10 +1,6 @@
 # model settings
+
 save_outs = False
-shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
-freeze = False
-freeze1 = False
 neg_pos_ratio = 3
 emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
              (512, 128), (256, 256), (128, 128), (128, 64),
@@ -12,19 +8,25 @@ emb_sizes = [(256, 64), (256, 128), (512, 64), (256, 32),
 stacked_convs = 2
 
 alpha = 0.15
+neg_alpha = 0.1
 
-warmup_iters = 500
-lr_step = [14, 18, 20]
-interval = 4
-lr_base = 0.00025
 imgs_per_gpu = 2
 gpu_num = 4
 
-base_ids = (7, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41,
-            42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 59, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
-            73, 74, 75, 76, 77, 78, 79)
+split_num = 1
 
-novel_ids = (4, 1, 14, 8, 39, 5, 2, 15, 56, 19, 60, 16, 17, 3, 0, 58, 18, 57, 6, 62)
+VOC_base_ids = (
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
+    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
+)
+
+VOC_novel_ids = (
+    (2, 5, 9, 13, 17),
+    (0, 4, 9, 12, 17),
+    (3, 7, 13, 16, 17)
+)
+
 
 model = dict(
     type='RetinaNet',
@@ -46,19 +48,27 @@ model = dict(
         num_outs=5,
         save_outs=save_outs),
     bbox_head=dict(
-        type='GARetinaDMLHead4',
-        num_classes=61,
+        type='GARetinaDMLNegHead5',
+        num_classes=16,
         in_channels=256,
         stacked_convs=stacked_convs,
-        feat_channels=256,
+        neg_sample_thresh=0.1,
+        pos_sub_neg_thresh=0.4,
+        alpha_hn=0.1,
+        neg_hn_ratio=3,
         cls_emb_head_cfg=dict(
             emb_channels=(256, 128),
             num_modes=1,
             sigma=0.5,
             cls_norm=False,
-            base_ids=base_ids,
-            novel_ids=novel_ids,
-        ),
+            beta=0.3,
+            neg_num_modes=3,
+            rep_neg_norm=False,
+            neg_detach=True,
+            rep_detach=True,
+            base_ids=VOC_base_ids[split_num-1],
+            novel_ids=VOC_novel_ids[split_num-1],),
+        feat_channels=256,
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
@@ -68,7 +78,7 @@ model = dict(
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],
         target_means=(.0, .0, .0, .0),
         target_stds=[1.0, 1.0, 1.0, 1.0],
-        loc_filter_thr=0.01,
+        loc_filter_thr=0.1,
         save_outs=save_outs,
         loss_loc=dict(
             type='FocalLoss',
@@ -84,7 +94,8 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
-        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
+        loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0),
+    ))
 # training and testing settings
 train_cfg = dict(
     ga_assigner=dict(
@@ -124,9 +135,8 @@ test_cfg = dict(
     # nms=dict(type='soft_nms', iou_thr=0.3, min_score=0.0001),
     nms=dict(type='nms', iou_thr=0.5),
     max_per_img=100)
-# dataset settings
-dataset_type = 'CocoDatasetBase'
-data_root = 'data/coco/'
+dataset_type = 'VOCDatasetBase{}'.format(split_num)
+data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
@@ -161,42 +171,40 @@ data = dict(
     imgs_per_gpu=imgs_per_gpu,
     workers_per_gpu=2,
     train=dict(
-        type=dataset_type,
-        # fixed_cls_idx=True,
-        ann_file=[data_root + 'annotations/instances_train2014_base.json',
-                  data_root + 'annotations/instances_valminusminival2014_base.json',
-                  ],
-        img_prefix=[data_root + 'images/trainval2014/', data_root + 'images/trainval2014/',],
-        pipeline=train_pipeline),
+        type='RepeatDataset',
+        times=1,
+        dataset=dict(
+            type=dataset_type,
+            ann_file=[
+                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
+            ],
+            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        # fixed_cls_idx=True,
-        # ann_file=data_root + 'annotations/instances_minival2014_base.json',
-        ann_file=data_root + 'annotations/instances_minival2014.json',
-        img_prefix=data_root + 'images/trainval2014/',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
+        img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # fixed_cls_idx=True,
-        # ann_file=data_root + 'annotations/instances_minival2014_base.json',
-        # ann_file=data_root + 'annotations/instances_minival2014.json',
-        # img_prefix=data_root + 'images/trainval2014/',
-        ann_file=data_root + 'annotations/instances_train2014_10shot_novel_standard.json',
-        img_prefix=data_root + 'images/trainval2014/',
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
+        img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
-evaluation = dict(interval=2, metric='bbox')
+
+evaluation = dict(interval=2, metric='mAP')
 
 # optimizer
-optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.00025*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=warmup_iters,
+    warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+    step=[10, 14])
+checkpoint_config = dict(interval=16)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -206,11 +214,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = lr_step[2]
+total_epochs = 16
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
 resume_from = None
-resume_optimizer = False
 workflow = [('train', 1)]

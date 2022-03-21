@@ -12,6 +12,9 @@ from mmdet.core import (AnchorGenerator, anchor_inside_flags, anchor_target,
                         multi_apply, multiclass_nms)
 
 from ..builder import build_loss
+from ..losses import FocalLoss
+
+import random
 import os
 from mmdet.utils.show_feature import show_dis
 
@@ -32,6 +35,7 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 weighted_score=False,
                  base_ids=None,
                  novel_ids=None,
                  freeze=False):
@@ -45,12 +49,14 @@ class DMLHead(nn.Module):
         self.emb_channels = emb_channels
         self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
+        self.weighted_score = weighted_score
         self.representations = nn.Parameter(
             torch.FloatTensor(self.num_reps, self.num_modes, self.emb_channels[-1]),
             requires_grad=False)
         self.base_ids=base_ids
         self.novel_ids=novel_ids
         normal_init(self.rep_fc, std=0.01)
+        # constant_init(self.neg_offset_fc, 0)
 
         if freeze:
             for c in [self.neg_offset_fc]:
@@ -77,14 +83,13 @@ class DMLHead(nn.Module):
         distances = torch.sqrt(((emb_vectors_ex - reps_ex)**2).sum(3))
         probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
 
-        reps_ex1 = reps.clone().expand(-1, reps.size(0), -1)
-        reps_ex2 = reps.clone().squeeze(1)[None, :, :].expand_as(reps_ex1)
-        reps_dis_mat = torch.sqrt(((reps_ex1.detach() - reps_ex2.detach()) ** 2).sum(-1))
-        # print(reps_dis_mat)
-        reps_dis_mat = reps_dis_mat[reps_dis_mat > 1e-10].reshape(reps.size(0), -1)
-        # print(reps_dis_mat.shape)
-        reps_dis_min = reps_dis_mat.min(dim=-1)[0]
-        reps_diff_probs = torch.exp(-(reps_dis_min)**2/(2.0*self.sigma**2))
+        with torch.no_grad():
+            reps1 = reps.detach().clone().expand(-1, reps.size(0), -1)
+            reps2 = reps.detach().clone().expand_as(reps1)
+
+            dis_mat = ((reps1 - reps2)**2).sum(-1)
+            dis_mat[dis_mat < 1e-5] = 1e5
+            min_inds = dis_mat.min(-1)
 
         # if not self.training:
         #     emb_vectors_flat = emb_vectors.permute(0, 2, 3, 1).flatten(0, 2)
@@ -107,17 +112,22 @@ class DMLHead(nn.Module):
         #     ev_min = emb_vectors_flat[ind_min, :]
         #     dis_l2 = (ev_min.unsqueeze(0).expand_as(reps.squeeze(1)) - reps.squeeze(1))**2
         #     show_dis(dis_l2, (0, 0.3))
-
-        if self.cls_norm:
+        if self.weighted_score:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
             cls_score = probs_sumj / probs_sumij
+            cls_score = torch.sqrt(cls_score * probs.max(dim=2)[0])
         else:
-            cls_score = probs.max(dim=2)[0]
-
+            if self.cls_norm:
+                probs_sumj = probs.sum(2)
+                probs_sumij = probs_sumj.sum(1, keepdim=True)
+                cls_score = probs_sumj / probs_sumij
+            else:
+                cls_score = probs.max(dim=2)[0]
+            cls_score = torch.sub(1, cls_score[:, min_inds, :, :]) * cls_score
         if save_outs:
             return cls_score, distances, emb_vectors, reps
-        return cls_score, distances, reps_diff_probs
+        return cls_score, distances
 
 
 def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
@@ -263,11 +273,11 @@ class GARetinaDMLHead16(GuidedAnchorHead):
 
         bbox_pred = self.retina_reg(reg_feat_adp, mask)
 
-        cls_score, distance, reps_diff_probs = self.cls_head(cls_feat_adp, self.grad_scale)
+        cls_score, distance = self.cls_head(cls_feat_adp, self.grad_scale)
         cls_score = inverse_sigmoid(cls_score)
 
         if self.training:
-            return cls_score, bbox_pred, shape_pred, loc_pred, distance, reps_diff_probs
+            return cls_score, bbox_pred, shape_pred, loc_pred, distance
         else:
             return cls_score, bbox_pred, shape_pred, loc_pred
 
@@ -295,14 +305,13 @@ class GARetinaDMLHead16(GuidedAnchorHead):
             return cls_scores, bbox_preds, shape_preds_reg, loc_preds
 
     @force_fp32(
-        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances', 'reps_diff_probs'))
+        apply_to=('cls_scores', 'bbox_preds', 'shape_preds', 'loc_preds', 'distances'))
     def loss(self,
              cls_scores,
              bbox_preds,
              shape_preds,
              loc_preds,
              distances,
-             reps_diff_probs,
              gt_bboxes,
              gt_labels,
              img_metas,
@@ -414,24 +423,12 @@ class GARetinaDMLHead16(GuidedAnchorHead):
                 num_total_samples=num_total_samples_emb)
             losses_emb.append(loss_emb)
 
-        # loss_reps_dis = F.nll_loss(reps_diff_probs[0][:, None].log(), torch.zeros(reps_diff_probs[0].shape).long().to(reps_diff_probs[0].device), None, None, -100, None, 'none').mean()
-        loss_reps_dis = (-torch.sub(1., reps_diff_probs[0]).log()).mean(())
-
-        print(losses_cls)
-        print(losses_bbox)
-        print(losses_shape)
-        print(losses_loc)
-        print(losses_emb)
-        print(loss_reps_dis)
-
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_shape=losses_shape,
             loss_loc=losses_loc,
-            loss_emb=losses_emb,
-            loss_reps_dis=[loss_reps_dis],
-        )
+            loss_emb=losses_emb)
 
     def loss_emb_single(self, distance, label, label_weights, num_total_samples):
         if label.dim() == 1:
