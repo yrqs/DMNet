@@ -89,7 +89,7 @@ class DMLHead(nn.Module):
 
             dis_mat = ((reps1 - reps2)**2).sum(-1)
             dis_mat[dis_mat < 1e-5] = 1e5
-            min_inds = dis_mat.min(-1)
+            min_inds = dis_mat.min(-1)[1]
 
         # if not self.training:
         #     emb_vectors_flat = emb_vectors.permute(0, 2, 3, 1).flatten(0, 2)

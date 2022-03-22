@@ -1,8 +1,8 @@
 # model settings
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [30, 25, 20, 15, 10]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -53,7 +53,8 @@ model = dict(
         octave_base_scale=4,
         scales_per_octave=3,
         octave_ratios=[0.5, 1.0, 2.0],
-        anchor_strides=[8, 16, 32, 64, 128],
+        anchor_strides=[11, 22, 43, 85, 171],
+        # anchor_strides=[8, 16, 32, 64, 128],
         anchor_base_sizes=None,
         anchoring_means=[.0, .0, .0, .0],
         anchoring_stds=[1.0, 1.0, 1.0, 1.0],

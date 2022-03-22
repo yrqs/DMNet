@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DATASET='voc'
-MODEL_NAME=ga_retina_dml4_voc_split1
+MODEL_NAME=ga_retina_dml16_voc_split1
 PARAMETER=wo_norm/default
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
