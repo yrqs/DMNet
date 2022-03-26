@@ -8,7 +8,7 @@ from mmdet.core import (auto_fp16, bbox_target, delta2bbox, force_fp32,
 from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
-
+from mmdet.ops.scale_grad import scale_tensor_gard
 
 @HEADS.register_module
 class BBoxHead(nn.Module):
@@ -25,6 +25,9 @@ class BBoxHead(nn.Module):
                  target_means=[0., 0., 0., 0.],
                  target_stds=[0.1, 0.1, 0.2, 0.2],
                  reg_class_agnostic=False,
+                 base_ids=None,
+                 novel_ids=None,
+                 grad_scale=None,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -54,11 +57,16 @@ class BBoxHead(nn.Module):
         else:
             in_channels *= self.roi_feat_area
         if self.with_cls:
-            self.fc_cls = nn.Linear(in_channels, num_classes)
+            fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
+            self.fc_cls = nn.Linear(in_channels, fc_cls_channels)
         if self.with_reg:
-            out_dim_reg = 4 if reg_class_agnostic else 4 * num_classes
+            fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
+            out_dim_reg = 4 if reg_class_agnostic else 4 * fc_cls_channels
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
+
+        self.base_ids = base_ids
+        self.grad_scale = grad_scale
 
     def init_weights(self):
         # conv layers are already initialized by ConvModule
@@ -71,11 +79,24 @@ class BBoxHead(nn.Module):
 
     @auto_fp16()
     def forward(self, x):
+        if self.training and (self.grad_scale is not None):
+            x = scale_tensor_gard(x, self.grad_scale)
+
         if self.with_avg_pool:
             x = self.avg_pool(x)
         x = x.view(x.size(0), -1)
         cls_score = self.fc_cls(x) if self.with_cls else None
         bbox_pred = self.fc_reg(x) if self.with_reg else None
+
+        if self.base_ids is not None:
+            out_channels = [0]
+            for id in self.base_ids:
+                out_channels.append(id+1)
+            if cls_score is not None:
+                cls_score = cls_score[:, out_channels]
+            if not self.reg_class_agnostic and bbox_pred is not None:
+                bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
+
         return cls_score, bbox_pred
 
     def get_target(self, sampling_results, gt_bboxes, gt_labels,

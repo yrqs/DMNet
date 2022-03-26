@@ -3,6 +3,7 @@ import torch.nn as nn
 from mmdet.ops import ConvModule
 from ..registry import HEADS
 from .bbox_head import BBoxHead
+from mmdet.ops.scale_grad import scale_tensor_gard
 
 
 @HEADS.register_module
@@ -24,6 +25,9 @@ class ConvFCBBoxHead(BBoxHead):
                  num_reg_fcs=0,
                  conv_out_channels=256,
                  fc_out_channels=1024,
+                 grad_scale=None,
+                 base_ids=None,
+                 novel_ids=None,
                  conv_cfg=None,
                  norm_cfg=None,
                  *args,
@@ -47,6 +51,10 @@ class ConvFCBBoxHead(BBoxHead):
         self.fc_out_channels = fc_out_channels
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
+
+        self.grad_scale = grad_scale
+        self.base_ids = base_ids
+        self.novel_ids = novel_ids
 
         # add shared convs and fcs
         self.shared_convs, self.shared_fcs, last_layer_dim = \
@@ -73,8 +81,9 @@ class ConvFCBBoxHead(BBoxHead):
 
         self.relu = nn.ReLU(inplace=True)
         # reconstruct fc_cls and fc_reg since input channels are changed
+        self.cls_output_channels = (len(base_ids) + len(novel_ids) + 1) if (base_ids is not None and novel_ids is not None) else self.num_classes
         if self.with_cls:
-            self.fc_cls = nn.Linear(self.cls_last_dim, self.num_classes)
+            self.fc_cls = nn.Linear(self.cls_last_dim, self.cls_output_channels)
         if self.with_reg:
             out_dim_reg = (4 if self.reg_class_agnostic else 4 *
                            self.num_classes)
@@ -131,6 +140,8 @@ class ConvFCBBoxHead(BBoxHead):
                     nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
+        if self.training and (self.grad_scale is not None):
+            x = scale_tensor_gard(x, self.grad_scale)
         # shared part
         if self.num_shared_convs > 0:
             for conv in self.shared_convs:
@@ -168,6 +179,13 @@ class ConvFCBBoxHead(BBoxHead):
 
         cls_score = self.fc_cls(x_cls) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
+
+        if cls_score is not None and self.base_ids is not None:
+            out_channels = [0]
+            for id in self.base_ids:
+                out_channels.append(id+1)
+            cls_score = cls_score[:, out_channels]
+
         return cls_score, bbox_pred
 
 

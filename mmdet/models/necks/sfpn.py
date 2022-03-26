@@ -5,50 +5,10 @@ from mmcv.cnn import xavier_init
 from mmdet.core import auto_fp16
 from mmdet.ops import ConvModule
 from ..registry import NECKS
-
-import torch
 from mmdet.ops.scale_grad import scale_tensor_gard
 
 @NECKS.register_module
-class FPN(nn.Module):
-    """
-    Feature Pyramid Network.
-
-    This is an implementation of - Feature Pyramid Networks for Object
-    Detection (https://arxiv.org/abs/1612.03144)
-
-    Args:
-        in_channels (List[int]):
-            number of input channels per scale
-
-        out_channels (int):
-            number of output channels (used at each scale)
-
-        num_outs (int):
-            number of output scales
-
-        start_level (int):
-            index of the first input scale to use as an output scale
-
-        end_level (int, default=-1):
-            index of the last input scale to use as an output scale
-
-    Example:
-        >>> import torch
-        >>> in_channels = [2, 3, 5, 7]
-        >>> scales = [340, 170, 84, 43]
-        >>> inputs = [torch.rand(1, c, s, s)
-        ...           for c, s in zip(in_channels, scales)]
-        >>> self = FPN(in_channels, 11, len(in_channels)).eval()
-        >>> outputs = self.forward(inputs)
-        >>> for i in range(len(outputs)):
-        ...     print('outputs[{}].shape = {!r}'.format(i, outputs[i].shape))
-        outputs[0].shape = torch.Size([1, 11, 340, 340])
-        outputs[1].shape = torch.Size([1, 11, 170, 170])
-        outputs[2].shape = torch.Size([1, 11, 84, 84])
-        outputs[3].shape = torch.Size([1, 11, 43, 43])
-    """
-
+class SFPN(nn.Module):
     def __init__(self,
                  in_channels,
                  out_channels,
@@ -63,7 +23,7 @@ class FPN(nn.Module):
                  norm_cfg=None,
                  act_cfg=None,
                  grad_scale=None):
-        super(FPN, self).__init__()
+        super(SFPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -86,7 +46,6 @@ class FPN(nn.Module):
         self.extra_convs_on_inputs = extra_convs_on_inputs
 
         self.lateral_convs = nn.ModuleList()
-        self.fpn_convs = nn.ModuleList()
 
         for i in range(self.start_level, self.backbone_end_level):
             l_conv = ConvModule(
@@ -97,18 +56,8 @@ class FPN(nn.Module):
                 norm_cfg=norm_cfg if not self.no_norm_on_lateral else None,
                 act_cfg=act_cfg,
                 inplace=False)
-            fpn_conv = ConvModule(
-                out_channels,
-                out_channels,
-                3,
-                padding=1,
-                conv_cfg=conv_cfg,
-                norm_cfg=norm_cfg,
-                act_cfg=act_cfg,
-                inplace=False)
 
             self.lateral_convs.append(l_conv)
-            self.fpn_convs.append(fpn_conv)
 
         # add extra conv layers (e.g., RetinaNet)
         extra_levels = num_outs - self.backbone_end_level + self.start_level
@@ -118,7 +67,7 @@ class FPN(nn.Module):
                     in_channels = self.in_channels[self.backbone_end_level - 1]
                 else:
                     in_channels = out_channels
-                extra_fpn_conv = ConvModule(
+                extra_lateral_conv = ConvModule(
                     in_channels,
                     out_channels,
                     3,
@@ -128,7 +77,7 @@ class FPN(nn.Module):
                     norm_cfg=norm_cfg,
                     act_cfg=act_cfg,
                     inplace=False)
-                self.fpn_convs.append(extra_fpn_conv)
+                self.lateral_convs.append(extra_lateral_conv)
         self.grad_scale = grad_scale
 
     # default init_weights for conv(msra) and norm in ConvModule
@@ -140,26 +89,19 @@ class FPN(nn.Module):
     @auto_fp16()
     def forward(self, inputs):
         assert len(inputs) == len(self.in_channels)
+
         if (self.grad_scale is not None) and self.training:
             inputs = [scale_tensor_gard(i, self.grad_scale) for i in inputs]
+
         # build laterals
-        laterals = [
+        outs = [
             lateral_conv(inputs[i + self.start_level])
-            for i, lateral_conv in enumerate(self.lateral_convs)
+            for i, lateral_conv in enumerate(self.lateral_convs[:len(inputs)-self.start_level])
         ]
 
         # build top-down path
-        used_backbone_levels = len(laterals)
-        for i in range(used_backbone_levels - 1, 0, -1):
-            prev_shape = laterals[i - 1].shape[2:]
-            laterals[i - 1] += F.interpolate(
-                laterals[i], size=prev_shape, mode='nearest')
+        used_backbone_levels = len(outs)
 
-        # build outputs
-        # part 1: from original levels
-        outs = [
-            self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels)
-        ]
         # part 2: add extra levels
         if self.num_outs > len(outs):
             # use max pool to get more levels on top of outputs
@@ -171,13 +113,13 @@ class FPN(nn.Module):
             else:
                 if self.extra_convs_on_inputs:
                     orig = inputs[self.backbone_end_level - 1]
-                    outs.append(self.fpn_convs[used_backbone_levels](orig))
+                    outs.append(self.lateral_convs[used_backbone_levels](orig))
                 else:
-                    outs.append(self.fpn_convs[used_backbone_levels](outs[-1]))
+                    outs.append(self.lateral_convs[used_backbone_levels](outs[-1]))
                 for i in range(used_backbone_levels + 1, self.num_outs):
                     if self.relu_before_extra_convs:
-                        outs.append(self.fpn_convs[i](F.relu(outs[-1])))
+                        outs.append(self.lateral_convs[i](F.relu(outs[-1])))
                     else:
-                        outs.append(self.fpn_convs[i](outs[-1]))
+                        outs.append(self.lateral_convs[i](outs[-1]))
 
         return tuple(outs)

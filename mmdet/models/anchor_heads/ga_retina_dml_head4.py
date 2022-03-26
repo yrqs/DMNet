@@ -154,6 +154,7 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                  stacked_convs=4,
                  cls_stacked_convs=None,
                  grad_scale=None,
+                 decoupled_cls_reg=False,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
@@ -168,7 +169,8 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.cls_emb_head_cfg = cls_emb_head_cfg
-        self.grad_scale=grad_scale
+        self.grad_scale = grad_scale
+        self.decoupled_cls_reg = decoupled_cls_reg
         super(GARetinaDMLHead4, self).__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs
@@ -240,8 +242,11 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         normal_init(self.retina_reg, std=0.01)
 
     def forward_single(self, x):
-        cls_feat = x
-        reg_feat = x
+        if self.decoupled_cls_reg:
+            cls_feat, reg_feat = x
+        else:
+            cls_feat = x
+            reg_feat = x
 
         if self.training and (self.grad_scale is not None):
             cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)

@@ -1,28 +1,18 @@
 # model settings
 
-alpha = 0.5
+shot_idx = [10, 30]
+train_repeat_times = [10, 5]
 
-warmup_iters = 500
-lr_step = [10, 14, 16]
-interval = 4
-lr_base = 0.00025
+base_ids = (7, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41,
+            42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 59, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
+            73, 74, 75, 76, 77, 78, 79)
+
+novel_ids = (4, 1, 14, 8, 39, 5, 2, 15, 56, 19, 60, 16, 17, 3, 0, 58, 18, 57, 6, 62)
+
 imgs_per_gpu = 2
-gpu_num = 2
+gpu_num = 8
 
-split_num = 1
-
-VOC_base_ids = (
-    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
-    (1, 2, 3, 5, 6, 7, 8, 10, 11, 13, 14, 15, 16, 18, 19),
-    (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19),
-)
-
-VOC_novel_ids = (
-    (2, 5, 9, 13, 17),
-    (0, 4, 9, 12, 17),
-    (3, 7, 13, 16, 17)
-)
-
+# model settings
 model = dict(
     type='FasterRCNN',
     pretrained='torchvision://resnet101',
@@ -43,6 +33,7 @@ model = dict(
         type='RPNHead',
         in_channels=256,
         feat_channels=256,
+        grad_scale=0.0,
         anchor_scales=[8],
         anchor_ratios=[0.5, 1.0, 2.0],
         anchor_strides=[4, 8, 16, 32, 64],
@@ -57,24 +48,16 @@ model = dict(
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
     bbox_head=dict(
-        type='DMLFCBBoxHead',
-        num_cls_fcs=1,
-        num_reg_fcs=1,
-        alpha=alpha,
+        type='SharedFCBBoxHead',
+        num_fcs=2,
         in_channels=256,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=16,
-        cls_emb_head_cfg=dict(
-            base_ids=VOC_base_ids[split_num-1],
-            novel_ids=VOC_novel_ids[split_num-1],
-            emb_channels=(256, 256),
-            num_modes=1,
-            sigma=0.5,
-            cls_norm=True),
+        num_classes=81,
+        grad_scale=0.01,
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
-        reg_class_agnostic=True,
+        reg_class_agnostic=False,
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)))
@@ -132,14 +115,16 @@ test_cfg = dict(
     # e.g., nms=dict(type='soft_nms', iou_thr=0.5, min_score=0.05)
 )
 # dataset settings
-dataset_type = 'VOCDatasetBase{}'.format(split_num)
-data_root = 'data/VOCdevkit/'
+dataset_type = 'CocoDataset'
+data_root = 'data/coco/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='Expand'),
+    dict(type='MinIoURandomCrop'),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -150,7 +135,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 600),
+        img_scale=(1333, 800),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -166,40 +151,39 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type='RepeatDataset',
-        times=1,
+        times=train_repeat_times,
         dataset=dict(
             type=dataset_type,
-            ann_file=[
-                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
-                # data_root + 'VOC2007/ImageSets/Main/trainval.txt',
-                # data_root + 'VOC2012/ImageSets/Main/trainval.txt'
-            ],
-            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            fixed_cls_idx=True,
+            ann_file=[data_root + 'annotations/instances_train2014_' + 'n' + 'shot_novel_standard.json',
+                      data_root + 'annotations/instances_val2014_' + 'n' + 'shot_novel_standard.json',
+                      ],
+            img_prefix=[data_root + 'images/trainval2014/', data_root + 'images/trainval2014/',],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
-        img_prefix=data_root + 'VOC2007/',
+        fixed_cls_idx=True,
+        ann_file=data_root + 'annotations/instances_minival2014.json',
+        img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
-        img_prefix=data_root + 'VOC2007/',
+        fixed_cls_idx=True,
+        ann_file=data_root + 'annotations/instances_minival2014.json',
+        img_prefix=data_root + 'images/trainval2014/',
         pipeline=test_pipeline))
-
-evaluation = dict(interval=2, metric='mAP')
+evaluation = dict(interval=2, metric='bbox')
 # optimizer
-optimizer = dict(type='SGD', lr=lr_base*imgs_per_gpu*gpu_num, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=warmup_iters,
+    warmup_iters=500,
     warmup_ratio=1.0 / 3,
-    step=[lr_step[0], lr_step[1]])
-checkpoint_config = dict(interval=interval)
+    step=[8, 11])
+checkpoint_config = dict(interval=4)
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -209,10 +193,11 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = lr_step[2]
+total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r101_fpn_1x'
 load_from = None
+# load_from = 'work_dirs/frcn_r101_coco/base/epoch_12.pth'
 resume_from = None
 workflow = [('train', 1)]

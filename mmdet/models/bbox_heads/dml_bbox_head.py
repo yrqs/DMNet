@@ -19,22 +19,26 @@ class DMLHead(nn.Module):
                  num_modes,
                  sigma,
                  cls_norm,
+                 base_ids=None,
+                 novel_ids=None,
                  freeze=False):
         assert num_modes==1
         super().__init__()
+        self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else cls_num
         self.cls_num = cls_num
         self.num_modes = num_modes
         self.sigma = sigma
         self.emb_module = emb_module
         self.emb_channels = emb_channels
-        # self.rep_fc = nn.Linear(1, cls_num * num_modes * emb_channels[-1])
         self.cls_norm = cls_norm
-        reps = nn.Embedding(cls_num * num_modes,  emb_channels[-1])
-        normal_init(reps)
-        self.representatives = reps.weight
-        # normal_init(self.rep_fc, std=0.01)
-        # constant_init(self.neg_offset_fc, 0)
+        self.rep_fc = nn.Linear(1, self.num_reps * num_modes * emb_channels[-1])
+        self.representations = nn.Parameter(
+            torch.zeros(self.num_reps, self.num_modes, self.emb_channels[-1]),
+            requires_grad=False)
+        normal_init(self.rep_fc, std=0.01)
 
+        self.base_ids=base_ids
+        self.novel_ids=novel_ids
         if freeze:
             for c in [self.neg_offset_fc]:
                 for p in c.parameters():
@@ -44,8 +48,16 @@ class DMLHead(nn.Module):
         emb_vectors = self.emb_module(x)
         emb_vectors = F.normalize(emb_vectors, p=2, dim=1)
 
-        reps = self.representatives.view(self.cls_num, self.num_modes, self.emb_channels[-1])
-        reps = F.normalize(reps, p=2, dim=2)
+        if self.training:
+            reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
+            reps  = reps.view(self.num_reps, self.num_modes, self.emb_channels[-1])
+            reps = F.normalize(reps, p=2, dim=2)
+            self.representations.data = reps.detach()
+        else:
+            reps = self.representations.detach()
+
+        if self.base_ids is not None:
+            reps = reps[self.base_ids, :, :]
 
         reps_ex = reps[None, :, :, :]
         emb_vectors_ex = emb_vectors[:, None, None, :]
@@ -62,8 +74,9 @@ class DMLHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        bg_socre = torch.sub(1, probs.max(2)[0].max(dim=1, keepdim=True)[0])
+        bg_socre = torch.sub(1, cls_score.max(dim=1, keepdim=True)[0])
         cls_score = torch.cat([bg_socre, cls_score], dim=1)
+        cls_score = cls_score * 15
         if save_outs:
             return cls_score, distances, emb_vectors, reps
         return cls_score, distances
@@ -188,11 +201,6 @@ class DMLFCBBoxHead(BBoxHead):
         emb_module = build_emb_module(emb_in_channels, self.cls_emb_head_cfg['emb_channels'])
         self.cls_head = DMLHead(emb_module, self.num_classes-1, **self.cls_emb_head_cfg)
 
-    def init_weights(self):
-        if self.with_reg:
-            nn.init.normal_(self.fc_reg.weight, 0, 0.001)
-            nn.init.constant_(self.fc_reg.bias, 0)
-
     def _add_conv_fc_branch(self,
                             num_branch_convs,
                             num_branch_fcs,
@@ -235,7 +243,9 @@ class DMLFCBBoxHead(BBoxHead):
         return branch_convs, branch_fcs, last_layer_dim
 
     def init_weights(self):
-        super().init_weights()
+        if self.with_reg:
+            nn.init.normal_(self.fc_reg.weight, 0, 0.001)
+            nn.init.constant_(self.fc_reg.bias, 0)
         # conv layers are already initialized by ConvModule
         for module_list in [self.shared_fcs, self.cls_fcs, self.reg_fcs]:
             for m in module_list.modules():
@@ -300,13 +310,13 @@ class DMLFCBBoxHead(BBoxHead):
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
             if cls_score.numel() > 0:
-                # losses['loss_cls'] = self.loss_cls(
-                #     cls_score,
-                #     labels,
-                #     label_weights,
-                #     avg_factor=avg_factor,
-                #     reduction_override=reduction_override)
-                losses['loss_cls'] = self.loss_dml_cls(cls_score, labels, label_weights, avg_factor)
+                losses['loss_cls'] = self.loss_cls(
+                    cls_score,
+                    labels,
+                    label_weights,
+                    avg_factor=avg_factor,
+                    reduction_override=reduction_override)
+                # losses['loss_cls'] = self.loss_dml_cls(cls_score, labels, label_weights, avg_factor)
                 losses['acc'] = accuracy(cls_score, labels)
         if bbox_pred is not None:
             pos_inds = labels > 0
@@ -361,7 +371,7 @@ class DMLFCBBoxHead(BBoxHead):
                        cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        # scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
+        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
         # scores = cls_score / cls_score.sum(1, keepdim=True) if cls_score is not None else None
         scores = cls_score
 
