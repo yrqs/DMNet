@@ -27,6 +27,7 @@ class AnchorGenerator(object):
         return self.base_anchors.size(0)
 
     def gen_base_anchors(self):
+        print(self.base_size)
         w = self.base_size
         h = self.base_size
         if self.ctr is None:
@@ -52,7 +53,6 @@ class AnchorGenerator(object):
             ],
             dim=-1).round()
         # yapf: enable
-
         return base_anchors
 
     def _meshgrid(self, x, y, row_major=True):

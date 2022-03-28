@@ -151,8 +151,6 @@ class FeatureAdaptionCls(nn.Module):
 
     def forward(self, x, save_out=False):
         offset = self.conv_offset(x.detach())
-        print('offset.min: ', offset.min())
-        print('offset.max: ', offset.max())
         x = self.relu(self.conv_adaption(x, offset))
         if save_out:
             return x, offset
@@ -379,6 +377,7 @@ class RetinaDMLHead7(AnchorHead):
         assert len(cls_score_list) == len(bbox_pred_list) == len(mlvl_anchors)
         mlvl_bboxes = []
         mlvl_scores = []
+        print(mlvl_anchors)
         for cls_score, bbox_pred, anchors in zip(cls_score_list,
                                                  bbox_pred_list, mlvl_anchors):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]

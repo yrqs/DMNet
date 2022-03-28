@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 DATASET='voc'
-MODEL_NAME=frcn_r101_voc_split1
-PARAMETER=MSRA
+MODEL_NAME=frcn_dml_voc_split1
+PARAMETER=alpha_05
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'
@@ -19,18 +19,6 @@ CUDA_VISIBLE_DEVICES=4,5 $PYTHON -m torch.distributed.launch --nproc_per_node=$G
 
 GPU_ID=4,5
 GPUS=2
-
-CONFIG=$CONFIG_PATH'finetuneD.py'
-for i in {1,2,3,5,10}
-do
-OMP_NUM_THREADS=1 \
-CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
-    $(dirname "$0")/finetune.py $CONFIG --launcher pytorch ${@:3} \
-    --validate \
-    --shot $i \
-    --work_dir $WORK_DIR_BASE'D/'$i'shot' \
-    && sleep 5s
-done
 
 CONFIG=$CONFIG_PATH'finetune.py'
 for i in {1,2,3,5,10}

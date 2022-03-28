@@ -38,7 +38,7 @@ model = dict(
         strides=(1, 2, 2),
         dilations=(1, 1, 1),
         out_indices=(2, ),
-        frozen_stages=1,
+        frozen_stages=2,
         norm_cfg=norm_cfg,
         norm_eval=True,
         style='pytorch'),
@@ -134,7 +134,7 @@ test_cfg = dict(
 dataset_type = 'VOCDataset'
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
-    mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
