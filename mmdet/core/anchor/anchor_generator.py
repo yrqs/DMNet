@@ -27,7 +27,6 @@ class AnchorGenerator(object):
         return self.base_anchors.size(0)
 
     def gen_base_anchors(self):
-        print(self.base_size)
         w = self.base_size
         h = self.base_size
         if self.ctr is None:

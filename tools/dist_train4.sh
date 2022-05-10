@@ -1,36 +1,37 @@
 #!/usr/bin/env bash
 
+ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
+
 DATASET='voc'
-MODEL_NAME=frcn_dml_voc_split1
-PARAMETER=alpha_03
+MODEL_NAME=frcn_r101_voc_split1
+PARAMETER=torchvision/fs_cos_neg_bbox_head/default
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'
-PORT=${PORT:-57500}
+PORT=${PORT:-27500}
 PYTHON=${PYTHON:-"python"}
 
-CONFIG=$CONFIG_PATH'base.py'
-GPUS=2
-OMP_NUM_THREADS=2 \
-CUDA_VISIBLE_DEVICES=6,7 $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
-    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
-    --validate \
-    --work_dir $WORK_DIR_BASE'base' && sleep 1s
+GPU_ID=0,1,2,3,4,5,6,7
+GPUS=8
 
-GPU_ID=6,7
-GPUS=2
+#CONFIG=$CONFIG_PATH'base.py'
+#OMP_NUM_THREADS=2 \
+#CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+#    $(dirname "$0")/train.py $CONFIG --launcher pytorch ${@:3} \
+#    --validate \
+#    --work_dir $WORK_DIR_BASE'base' && sleep 20s;
 
-CONFIG=$CONFIG_PATH'finetune.py'
+CONFIG=$CONFIG_PATH'finetuneDFCrop.py'
 for i in {1,2,3,5,10}
 do
-OMP_NUM_THREADS=1 \
+OMP_NUM_THREADS=2 \
 CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
     $(dirname "$0")/finetune.py $CONFIG --launcher pytorch ${@:3} \
     --validate \
     --shot $i \
-    --work_dir $WORK_DIR_BASE$i'shot' \
-    && sleep 5s
-done
+    --work_dir $WORK_DIR_BASE'DFCropFreeze/'$i'shot' \
+    && sleep 20s
+done;
 
 #GPU_ID=0,1,2,3,4,5,6,7
 #GPUS=6

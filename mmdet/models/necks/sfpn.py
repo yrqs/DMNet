@@ -108,7 +108,8 @@ class SFPN(nn.Module):
             # (e.g., Faster R-CNN, Mask R-CNN)
             if not self.add_extra_convs:
                 for i in range(self.num_outs - used_backbone_levels):
-                    outs.append(F.max_pool2d(outs[-1], 1, stride=2))
+                    outs.append(F.avg_pool2d(outs[-1], 3, stride=2, padding=1))
+                    # outs.append(F.max_pool2d(outs[-1], 1, stride=2))
             # add conv layers on top of original feature maps (RetinaNet)
             else:
                 if self.extra_convs_on_inputs:

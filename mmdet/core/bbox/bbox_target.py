@@ -55,6 +55,7 @@ def bbox_target_single(pos_bboxes,
                                       target_stds)
         bbox_targets[:num_pos, :] = pos_bbox_targets
         bbox_weights[:num_pos, :] = 1
+        bbox_weights[labels < 0, :] = 0
     if num_neg > 0:
         label_weights[-num_neg:] = 1.0
 

@@ -140,8 +140,6 @@ class ConvFCBBoxHead(BBoxHead):
                     nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        if self.training and (self.grad_scale is not None):
-            x = scale_tensor_gard(x, self.grad_scale)
         # shared part
         if self.num_shared_convs > 0:
             for conv in self.shared_convs:
@@ -176,6 +174,10 @@ class ConvFCBBoxHead(BBoxHead):
             x_reg = x_reg.flatten(1)
         for fc in self.reg_fcs:
             x_reg = self.relu(fc(x_reg))
+
+        if self.training and (self.grad_scale is not None):
+            x_cls = scale_tensor_gard(x_cls, self.grad_scale)
+            x_reg = scale_tensor_gard(x_reg, self.grad_scale)
 
         cls_score = self.fc_cls(x_cls) if self.with_cls else None
         bbox_pred = self.fc_reg(x_reg) if self.with_reg else None

@@ -9,7 +9,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 1
+gpu_num = 8
 
 split_num = 1
 
@@ -42,8 +42,7 @@ model = dict(
         out_channels=256,
         start_level=1,
         add_extra_convs=True,
-        num_outs=5,
-        save_outs=save_outs),
+        num_outs=5),
     bbox_head=dict(
         type='GARetinaDMLHead4',
         num_classes=16,
@@ -163,10 +162,10 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             ann_file=[
-                # data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
-                # data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
-                data_root + 'VOC2007/ImageSets/Main/trainval.txt',
-                data_root + 'VOC2012/ImageSets/Main/trainval.txt'
+                data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
+                # data_root + 'VOC2007/ImageSets/Main/trainval.txt',
+                # data_root + 'VOC2012/ImageSets/Main/trainval.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),

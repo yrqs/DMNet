@@ -1,15 +1,15 @@
-import torch.nn as nn
-
-from mmdet.ops import ConvModule
-from ..registry import HEADS
-from .bbox_head import BBoxHead
-
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn import normal_init, constant_init
+from torch.nn.modules.utils import _pair
+
 from mmdet.core import (auto_fp16, bbox_target, delta2bbox, force_fp32,
                         multiclass_nms)
+from mmcv.cnn import normal_init, constant_init
+from ..builder import build_loss
 from ..losses import accuracy
+from ..registry import HEADS
+from mmdet.ops.scale_grad import scale_tensor_gard
 
 class DMLHead(nn.Module):
     def __init__(self,
@@ -25,6 +25,7 @@ class DMLHead(nn.Module):
         assert num_modes==1
         super().__init__()
         self.num_reps = len(base_ids) + len(novel_ids) if base_ids is not None else cls_num
+        self.num_reps += 1
         self.cls_num = cls_num
         self.num_modes = num_modes
         self.sigma = sigma
@@ -37,15 +38,17 @@ class DMLHead(nn.Module):
             requires_grad=False)
         normal_init(self.rep_fc, std=0.01)
 
-        self.base_ids=base_ids
-        self.novel_ids=novel_ids
+        self.base_ids = base_ids
+        self.novel_ids = novel_ids
         if freeze:
             for c in [self.neg_offset_fc]:
                 for p in c.parameters():
                     p.requires_grad = False
 
     def forward(self, x, save_outs=False):
-        emb_vectors = self.emb_module(x)
+        emb_vectors = x
+        if self.emb_module is not None:
+            emb_vectors = self.emb_module(x)
         emb_vectors = F.normalize(emb_vectors, p=2, dim=1)
 
         if self.training:
@@ -57,7 +60,8 @@ class DMLHead(nn.Module):
             reps = self.representations.detach()
 
         if self.base_ids is not None:
-            reps = reps[self.base_ids, :, :]
+            ids = [0] + [i + 1 for i in self.base_ids]
+            reps = reps[ids, :, :]
 
         reps_ex = reps[None, :, :, :]
         emb_vectors_ex = emb_vectors[:, None, None, :]
@@ -67,6 +71,8 @@ class DMLHead(nn.Module):
         # probs_ori = torch.exp(-(distances)**2/(2.0*self.sigma**2))
         # probs_ori = probs_ori.max(dim=2)[0]
         probs = torch.exp(-(distances)**2/(2.0*self.sigma**2))
+        # bg_probs = torch.sub(1, probs.max(dim=1, keepdim=True)[0])
+        # probs = torch.cat([bg_probs, probs], dim=1)
         if self.cls_norm:
             probs_sumj = probs.sum(2)
             probs_sumij = probs_sumj.sum(1, keepdim=True)
@@ -74,15 +80,16 @@ class DMLHead(nn.Module):
         else:
             cls_score = probs.max(dim=2)[0]
 
-        bg_socre = torch.sub(1, cls_score.max(dim=1, keepdim=True)[0])
-        cls_score = torch.cat([bg_socre, cls_score], dim=1)
-        cls_score = cls_score * 15
+        # bg_socre = torch.sub(1, probs.max(dim=2)[0].max(dim=1, keepdim=True)[0])
+        # cls_score = torch.cat([bg_socre, cls_score], dim=1)
+        # cls_score = cls_score / cls_score.sum(dim=1, keepdim=True)
         if save_outs:
             return cls_score, distances, emb_vectors, reps
         return cls_score, distances
 
 def build_emb_module(input_channels, emb_channels):
     emb_list = []
+    emb_list.append(nn.BatchNorm1d(input_channels)),
     for i in range(len(emb_channels)):
         if i == 0:
             emb_list.append(nn.Linear(input_channels, emb_channels[i])),
@@ -102,199 +109,116 @@ def build_emb_module(input_channels, emb_channels):
 
     return nn.Sequential(*tuple(emb_list))
 
-
 @HEADS.register_module
-class DMLFCBBoxHead(BBoxHead):
-    r"""More general bbox head, with shared conv and fc layers and two optional
-    separated branches.
-
-                                /-> cls convs -> cls fcs -> cls
-    shared convs -> shared fcs
-                                \-> reg convs -> reg fcs -> reg
-    """  # noqa: W605
+class DMLBBoxHead(nn.Module):
+    """Simplest RoI head, with only two fc layers for classification and
+    regression respectively"""
 
     def __init__(self,
-                 num_shared_convs=0,
-                 num_shared_fcs=0,
-                 num_cls_convs=0,
-                 num_cls_fcs=0,
-                 num_reg_convs=0,
-                 num_reg_fcs=2,
-                 conv_out_channels=256,
-                 fc_out_channels=1024,
-                 alpha=0.15,
+                 with_avg_pool=False,
+                 with_cls=True,
+                 with_reg=True,
+                 roi_feat_size=7,
+                 in_channels=256,
+                 num_classes=81,
+                 target_means=[0., 0., 0., 0.],
+                 target_stds=[0.1, 0.1, 0.2, 0.2],
+                 reg_class_agnostic=False,
+                 grad_scale=None,
+                 alpha=0.3,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
                      sigma=0.5,
                      cls_norm=False,
                  ),
-                 conv_cfg=None,
-                 norm_cfg=None,
-                 *args,
-                 **kwargs):
-        super().__init__(*args, **kwargs)
-        assert (num_shared_convs + num_shared_fcs + num_cls_convs +
-                num_cls_fcs + num_reg_convs + num_reg_fcs > 0)
-        if num_cls_convs > 0 or num_reg_convs > 0:
-            assert num_shared_fcs == 0
-        if not self.with_cls:
-            assert num_cls_convs == 0 and num_cls_fcs == 0
-        if not self.with_reg:
-            assert num_reg_convs == 0 and num_reg_fcs == 0
-        self.num_shared_convs = num_shared_convs
-        self.num_shared_fcs = num_shared_fcs
-        self.num_cls_convs = num_cls_convs
-        self.num_cls_fcs = num_cls_fcs
-        self.num_reg_convs = num_reg_convs
-        self.num_reg_fcs = num_reg_fcs
-        self.conv_out_channels = conv_out_channels
-        self.fc_out_channels = fc_out_channels
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
-        self.alpha = alpha
+                 loss_cls=dict(
+                     type='CrossEntropyLoss',
+                     use_sigmoid=False,
+                     loss_weight=1.0),
+                 loss_bbox=dict(
+                     type='SmoothL1Loss', beta=1.0, loss_weight=1.0)):
+        super(DMLBBoxHead, self).__init__()
+        assert with_cls or with_reg
+        self.with_avg_pool = with_avg_pool
+        self.with_cls = with_cls
+        self.with_reg = with_reg
+        self.roi_feat_size = _pair(roi_feat_size)
+        self.roi_feat_area = self.roi_feat_size[0] * self.roi_feat_size[1]
+        self.in_channels = in_channels
+        self.num_classes = num_classes
+        self.target_means = target_means
+        self.target_stds = target_stds
+        self.reg_class_agnostic = reg_class_agnostic
+        self.fp16_enabled = False
+
+        self.loss_cls = build_loss(loss_cls)
+        self.loss_bbox = build_loss(loss_bbox)
+
         self.cls_emb_head_cfg = cls_emb_head_cfg
+        self.alpha = alpha
 
-        # add shared convs and fcs
-        self.shared_convs, self.shared_fcs, last_layer_dim = \
-            self._add_conv_fc_branch(
-                self.num_shared_convs, self.num_shared_fcs, self.in_channels,
-                True)
-        self.shared_out_channels = last_layer_dim
-
-        # add cls specific branch
-        self.cls_convs, self.cls_fcs, self.cls_last_dim = \
-            self._add_conv_fc_branch(
-                self.num_cls_convs, self.num_cls_fcs, self.shared_out_channels)
-
-        # add reg specific branch
-        self.reg_convs, self.reg_fcs, self.reg_last_dim = \
-            self._add_conv_fc_branch(
-                self.num_reg_convs, self.num_reg_fcs, self.shared_out_channels)
-
-        if self.num_shared_fcs == 0 and not self.with_avg_pool:
-            if self.num_cls_fcs == 0:
-                self.cls_last_dim *= self.roi_feat_area
-            if self.num_reg_fcs == 0:
-                self.reg_last_dim *= self.roi_feat_area
-
-        self.relu = nn.ReLU(inplace=True)
-        # reconstruct fc_cls and fc_reg since input channels are changed
+        in_channels = self.in_channels
+        if self.with_avg_pool:
+            self.avg_pool = nn.AvgPool2d(self.roi_feat_size)
+        else:
+            in_channels *= self.roi_feat_area
         if self.with_cls:
-            self.fc_cls = nn.Linear(1, 1)
-            for c in [self.fc_cls]:
-                for p in c.parameters():
-                    p.requires_grad = False
+            # emb_module = build_emb_module(in_channels, cls_emb_head_cfg['emb_channels'])
+            self.cls_head = DMLHead(None, self.num_classes - 1, **cls_emb_head_cfg)
 
         if self.with_reg:
-            out_dim_reg = (4 if self.reg_class_agnostic else 4 *
-                           self.num_classes)
-            self.fc_reg = nn.Linear(self.reg_last_dim, out_dim_reg)
+            base_ids = cls_emb_head_cfg['base_ids'] if 'base_ids' in cls_emb_head_cfg.keys() else None,
+            novel_ids = cls_emb_head_cfg['novel_ids'] if 'novel_ids' in cls_emb_head_cfg.keys() else None,
+            fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
+            out_dim_reg = 4 if reg_class_agnostic else 4 * fc_cls_channels
+            self.fc_reg = nn.Linear(in_channels, out_dim_reg)
+        self.debug_imgs = None
 
-        if num_cls_fcs > 0 or num_shared_fcs > 0:
-            emb_in_channels = self.fc_out_channels
-        elif num_cls_convs > 0 or num_shared_convs > 0:
-            emb_in_channels = self.conv_out_channels if self.with_avg_pool else self.conv_out_channels * self.roi_feat_area
-        else:
-            emb_in_channels = self.in_channels if self.with_avg_pool else self.in_channels * self.roi_feat_area
-
-        emb_module = build_emb_module(emb_in_channels, self.cls_emb_head_cfg['emb_channels'])
-        self.cls_head = DMLHead(emb_module, self.num_classes-1, **self.cls_emb_head_cfg)
-
-    def _add_conv_fc_branch(self,
-                            num_branch_convs,
-                            num_branch_fcs,
-                            in_channels,
-                            is_shared=False):
-        """Add shared or separable branch
-
-        convs -> avg pool (optional) -> fcs
-        """
-        last_layer_dim = in_channels
-        # add branch specific conv layers
-        branch_convs = nn.ModuleList()
-        if num_branch_convs > 0:
-            for i in range(num_branch_convs):
-                conv_in_channels = (
-                    last_layer_dim if i == 0 else self.conv_out_channels)
-                branch_convs.append(
-                    ConvModule(
-                        conv_in_channels,
-                        self.conv_out_channels,
-                        3,
-                        padding=1,
-                        conv_cfg=self.conv_cfg,
-                        norm_cfg=self.norm_cfg))
-            last_layer_dim = self.conv_out_channels
-        # add branch specific fc layers
-        branch_fcs = nn.ModuleList()
-        if num_branch_fcs > 0:
-            # for shared branch, only consider self.with_avg_pool
-            # for separated branches, also consider self.num_shared_fcs
-            if (is_shared
-                    or self.num_shared_fcs == 0) and not self.with_avg_pool:
-                last_layer_dim *= self.roi_feat_area
-            for i in range(num_branch_fcs):
-                fc_in_channels = (
-                    last_layer_dim if i == 0 else self.fc_out_channels)
-                branch_fcs.append(
-                    nn.Linear(fc_in_channels, self.fc_out_channels))
-            last_layer_dim = self.fc_out_channels
-        return branch_convs, branch_fcs, last_layer_dim
+        self.grad_scale = grad_scale
 
     def init_weights(self):
+        # conv layers are already initialized by ConvModule
+        # if self.with_cls:
+        #     nn.init.normal_(self.fc_cls.weight, 0, 0.01)
+        #     nn.init.constant_(self.fc_cls.bias, 0)
         if self.with_reg:
             nn.init.normal_(self.fc_reg.weight, 0, 0.001)
             nn.init.constant_(self.fc_reg.bias, 0)
-        # conv layers are already initialized by ConvModule
-        for module_list in [self.shared_fcs, self.cls_fcs, self.reg_fcs]:
-            for m in module_list.modules():
-                if isinstance(m, nn.Linear):
-                    nn.init.xavier_uniform_(m.weight)
-                    nn.init.constant_(m.bias, 0)
 
+    @auto_fp16()
     def forward(self, x):
-        # shared part
-        if self.num_shared_convs > 0:
-            for conv in self.shared_convs:
-                x = conv(x)
+        if self.training and (self.grad_scale is not None):
+            x = scale_tensor_gard(x, self.grad_scale)
 
-        if self.num_shared_fcs > 0:
-            if self.with_avg_pool:
-                x = self.avg_pool(x)
+        if self.with_avg_pool:
+            x = self.avg_pool(x)
+        x = x.view(x.size(0), -1)
+        cls_score, distance = self.cls_head(x) if self.with_cls else None
+        bbox_pred = self.fc_reg(x) if self.with_reg else None
 
-            x = x.flatten(1)
-
-            for fc in self.shared_fcs:
-                x = self.relu(fc(x))
-        # separate branches
-        x_cls = x
-        x_reg = x
-
-        for conv in self.cls_convs:
-            x_cls = conv(x_cls)
-        if x_cls.dim() > 2:
-            if self.with_avg_pool:
-                x_cls = self.avg_pool(x_cls)
-            x_cls = x_cls.flatten(1)
-        for fc in self.cls_fcs:
-            x_cls = self.relu(fc(x_cls))
-
-        for conv in self.reg_convs:
-            x_reg = conv(x_reg)
-        if x_reg.dim() > 2:
-            if self.with_avg_pool:
-                x_reg = self.avg_pool(x_reg)
-            x_reg = x_reg.flatten(1)
-        for fc in self.reg_fcs:
-            x_reg = self.relu(fc(x_reg))
-
-        cls_score, distance = self.cls_head(x_cls) if self.with_cls else None
-        bbox_pred = self.fc_reg(x_reg) if self.with_reg else None
         if self.training:
             return cls_score, bbox_pred, distance
         else:
             return cls_score, bbox_pred
+
+    def get_target(self, sampling_results, gt_bboxes, gt_labels,
+                   rcnn_train_cfg):
+        pos_proposals = [res.pos_bboxes for res in sampling_results]
+        neg_proposals = [res.neg_bboxes for res in sampling_results]
+        pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
+        pos_gt_labels = [res.pos_gt_labels for res in sampling_results]
+        reg_classes = 1 if self.reg_class_agnostic else self.num_classes
+        cls_reg_targets = bbox_target(
+            pos_proposals,
+            neg_proposals,
+            pos_gt_bboxes,
+            pos_gt_labels,
+            rcnn_train_cfg,
+            reg_classes,
+            target_means=self.target_means,
+            target_stds=self.target_stds)
+        return cls_reg_targets
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred', 'distance'))
     def loss(self,
@@ -307,16 +231,16 @@ class DMLFCBBoxHead(BBoxHead):
              bbox_weights,
              reduction_override=None):
         losses = dict()
+        avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
         if cls_score is not None:
-            avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
             if cls_score.numel() > 0:
-                losses['loss_cls'] = self.loss_cls(
-                    cls_score,
-                    labels,
-                    label_weights,
-                    avg_factor=avg_factor,
-                    reduction_override=reduction_override)
-                # losses['loss_cls'] = self.loss_dml_cls(cls_score, labels, label_weights, avg_factor)
+                # losses['loss_cls'] = self.loss_cls(
+                #     cls_score,
+                #     labels,
+                #     label_weights,
+                #     avg_factor=avg_factor,
+                #     reduction_override=reduction_override)
+                losses['loss_cls'] = self.loss_dml_cls(cls_score, labels, label_weights, avg_factor)
                 losses['acc'] = accuracy(cls_score, labels)
         if bbox_pred is not None:
             pos_inds = labels > 0
@@ -339,7 +263,8 @@ class DMLFCBBoxHead(BBoxHead):
         return losses
 
     def loss_emb(self, distance, labels, label_weights):
-        pos_inds = labels > 0
+        pos_num = (labels > 0).sum()
+        pos_inds = labels > -1
         distance_pos = distance[pos_inds]
 
         n = distance_pos.size(0)
@@ -348,12 +273,12 @@ class DMLFCBBoxHead(BBoxHead):
 
         labels_pos = labels[pos_inds]
         label_weights_pos = label_weights[pos_inds]
-        labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()[:, 1:]
+        labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()
         labels_pos_one_hot_inverse = torch.sub(1, labels_pos_one_hot)
         distance_pos_target = distance_pos[labels_pos_one_hot].reshape(n, -1, n_modes)
         distance_pos_other = distance_pos[labels_pos_one_hot_inverse].reshape(n, -1, n_modes)
         loss_emb_all = F.relu(distance_pos_target.min(-1)[0].squeeze(-1) - distance_pos_other.min(-1)[0].min(-1)[0] + self.alpha)
-        loss_emb = (loss_emb_all*label_weights_pos).mean()
+        loss_emb = (loss_emb_all*label_weights_pos) / pos_num
         return loss_emb
 
     def loss_dml_cls(self, cls_score, labels, label_weights, avg_factor):
@@ -361,6 +286,7 @@ class DMLFCBBoxHead(BBoxHead):
         loss_dml_cls = loss_cls_all.sum() / avg_factor
         return loss_dml_cls
 
+    @force_fp32(apply_to=('cls_score', 'bbox_pred'))
     def get_det_bboxes(self,
                        rois,
                        cls_score,
@@ -371,8 +297,7 @@ class DMLFCBBoxHead(BBoxHead):
                        cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
-        # scores = cls_score / cls_score.sum(1, keepdim=True) if cls_score is not None else None
+        # scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
         scores = cls_score
 
         if bbox_pred is not None:
@@ -400,3 +325,112 @@ class DMLFCBBoxHead(BBoxHead):
                                                     cfg.max_per_img)
 
             return det_bboxes, det_labels
+
+    @force_fp32(apply_to=('bbox_preds', ))
+    def refine_bboxes(self, rois, labels, bbox_preds, pos_is_gts, img_metas):
+        """Refine bboxes during training.
+
+        Args:
+            rois (Tensor): Shape (n*bs, 5), where n is image number per GPU,
+                and bs is the sampled RoIs per image. The first column is
+                the image id and the next 4 columns are x1, y1, x2, y2.
+            labels (Tensor): Shape (n*bs, ).
+            bbox_preds (Tensor): Shape (n*bs, 4) or (n*bs, 4*#class).
+            pos_is_gts (list[Tensor]): Flags indicating if each positive bbox
+                is a gt bbox.
+            img_metas (list[dict]): Meta info of each image.
+
+        Returns:
+            list[Tensor]: Refined bboxes of each image in a mini-batch.
+
+        Example:
+            >>> # xdoctest: +REQUIRES(module:kwarray)
+            >>> import kwarray
+            >>> import numpy as np
+            >>> from mmdet.core.bbox.demodata import random_boxes
+            >>> self = BBoxHead(reg_class_agnostic=True)
+            >>> n_roi = 2
+            >>> n_img = 4
+            >>> scale = 512
+            >>> rng = np.random.RandomState(0)
+            >>> img_metas = [{'img_shape': (scale, scale)}
+            ...              for _ in range(n_img)]
+            >>> # Create rois in the expected format
+            >>> roi_boxes = random_boxes(n_roi, scale=scale, rng=rng)
+            >>> img_ids = torch.randint(0, n_img, (n_roi,))
+            >>> img_ids = img_ids.float()
+            >>> rois = torch.cat([img_ids[:, None], roi_boxes], dim=1)
+            >>> # Create other args
+            >>> labels = torch.randint(0, 2, (n_roi,)).long()
+            >>> bbox_preds = random_boxes(n_roi, scale=scale, rng=rng)
+            >>> # For each image, pretend random positive boxes are gts
+            >>> is_label_pos = (labels.numpy() > 0).astype(np.int)
+            >>> lbl_per_img = kwarray.group_items(is_label_pos,
+            ...                                   img_ids.numpy())
+            >>> pos_per_img = [sum(lbl_per_img.get(gid, []))
+            ...                for gid in range(n_img)]
+            >>> pos_is_gts = [
+            >>>     torch.randint(0, 2, (npos,)).byte().sort(
+            >>>         descending=True)[0]
+            >>>     for npos in pos_per_img
+            >>> ]
+            >>> bboxes_list = self.refine_bboxes(rois, labels, bbox_preds,
+            >>>                    pos_is_gts, img_metas)
+            >>> print(bboxes_list)
+        """
+        img_ids = rois[:, 0].long().unique(sorted=True)
+        assert img_ids.numel() <= len(img_metas)
+
+        bboxes_list = []
+        for i in range(len(img_metas)):
+            inds = torch.nonzero(rois[:, 0] == i).squeeze(dim=1)
+            num_rois = inds.numel()
+
+            bboxes_ = rois[inds, 1:]
+            label_ = labels[inds]
+            bbox_pred_ = bbox_preds[inds]
+            img_meta_ = img_metas[i]
+            pos_is_gts_ = pos_is_gts[i]
+
+            bboxes = self.regress_by_class(bboxes_, label_, bbox_pred_,
+                                           img_meta_)
+
+            # filter gt bboxes
+            pos_keep = 1 - pos_is_gts_
+            keep_inds = pos_is_gts_.new_ones(num_rois)
+            keep_inds[:len(pos_is_gts_)] = pos_keep
+
+            bboxes_list.append(bboxes[keep_inds.type(torch.bool)])
+
+        return bboxes_list
+
+    @force_fp32(apply_to=('bbox_pred', ))
+    def regress_by_class(self, rois, label, bbox_pred, img_meta):
+        """Regress the bbox for the predicted class. Used in Cascade R-CNN.
+
+        Args:
+            rois (Tensor): shape (n, 4) or (n, 5)
+            label (Tensor): shape (n, )
+            bbox_pred (Tensor): shape (n, 4*(#class+1)) or (n, 4)
+            img_meta (dict): Image meta info.
+
+        Returns:
+            Tensor: Regressed bboxes, the same shape as input rois.
+        """
+        assert rois.size(1) == 4 or rois.size(1) == 5, repr(rois.shape)
+
+        if not self.reg_class_agnostic:
+            label = label * 4
+            inds = torch.stack((label, label + 1, label + 2, label + 3), 1)
+            bbox_pred = torch.gather(bbox_pred, 1, inds)
+        assert bbox_pred.size(1) == 4
+
+        if rois.size(1) == 4:
+            new_rois = delta2bbox(rois, bbox_pred, self.target_means,
+                                  self.target_stds, img_meta['img_shape'])
+        else:
+            bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,
+                                self.target_stds, img_meta['img_shape'])
+            new_rois = torch.cat((rois[:, [0]], bboxes), dim=1)
+
+        return new_rois

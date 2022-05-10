@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 from mmcv.cnn import bias_init_with_prob
+import matplotlib
+matplotlib.use('TkAgg')  # or whatever other backend that you want
+import matplotlib.colors
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 # checkpoint_path = 'work_dirs/ga_retina_dml3_dfpn2_emb256_64_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16/epoch_16.pth'
 # checkpoint_path = 'work_dirs/ga_retina_dml9_s2_fpn_emb256_128_alpha015_le10_CE_nratio3_voc_base2_r1_lr00025x2x2_10_14_16_ind1_1/epoch_16.pth'
@@ -94,7 +99,69 @@ def init_novel_rep(novel_ids):
     new_checkpoint_path = checkpoint_path[:-4] + '_init_nrep' + checkpoint_path[-4:]
     torch.save(checkpoint, new_checkpoint_path)
 
+def remove_res5():
+    checkpoint_path = '/home/luyue/.cache/torch/checkpoints/resnet101-5d3b4d8f.pth'
+    state_dict = torch.load(checkpoint_path)
+    remove_keys = 'layer4.0.conv1.weight, layer4.0.bn1.running_mean, layer4.0.bn1.running_var, layer4.0.bn1.weight, layer4.0.bn1.bias, layer4.0.conv2.weight, layer4.0.bn2.running_mean, layer4.0.bn2.running_var, layer4.0.bn2.weight, layer4.0.bn2.bias, layer4.0.conv3.weight, layer4.0.bn3.running_mean, layer4.0.bn3.running_var, layer4.0.bn3.weight, layer4.0.bn3.bias, layer4.0.downsample.0.weight, layer4.0.downsample.1.running_mean, layer4.0.downsample.1.running_var, layer4.0.downsample.1.weight, layer4.0.downsample.1.bias, layer4.1.conv1.weight, layer4.1.bn1.running_mean, layer4.1.bn1.running_var, layer4.1.bn1.weight, layer4.1.bn1.bias, layer4.1.conv2.weight, layer4.1.bn2.running_mean, layer4.1.bn2.running_var, layer4.1.bn2.weight, layer4.1.bn2.bias, layer4.1.conv3.weight, layer4.1.bn3.running_mean, layer4.1.bn3.running_var, layer4.1.bn3.weight, layer4.1.bn3.bias, layer4.2.conv1.weight, layer4.2.bn1.running_mean, layer4.2.bn1.running_var, layer4.2.bn1.weight, layer4.2.bn1.bias, layer4.2.conv2.weight, layer4.2.bn2.running_mean, layer4.2.bn2.running_var, layer4.2.bn2.weight, layer4.2.bn2.bias, layer4.2.conv3.weight, layer4.2.bn3.running_mean, layer4.2.bn3.running_var, layer4.2.bn3.weight, layer4.2.bn3.bias, fc.weight, fc.bias'
+    remove_keys = remove_keys.split(',')
+    remove_keys = [k.strip() for k in remove_keys]
+    for k in remove_keys:
+        state_dict.pop(k)
+    new_checkpoint_path = checkpoint_path[:-4] + 'wo_res5' + checkpoint_path[-4:]
+    torch.save(state_dict, new_checkpoint_path)
+
+def channel_pruning():
+    checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/1shot/epoch_16.pth'
+    model = torch.load(checkpoint_path)
+    state_dict = model['state_dict']
+    fc_cls_w = state_dict['bbox_head.fc_cls.weight'].clone()
+    w_s = fc_cls_w.abs().sort(dim=1, descending=True)[0]
+    thresh = w_s[:, 256].reshape(-1, 1).expand_as(fc_cls_w)
+    print((fc_cls_w.abs() < thresh).sum())
+    fc_cls_w[fc_cls_w.abs() < thresh] = 0.
+    fc_cls_w[0, :] = model['state_dict']['bbox_head.fc_cls.weight'][0, :]
+    model['state_dict']['bbox_head.fc_cls.weight'] = fc_cls_w
+    new_checkpoint_path = checkpoint_path[:-4] + '_mask' + checkpoint_path[-4:]
+    torch.save(model, new_checkpoint_path)
+
+def channel_mask():
+    checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/1shot/epoch_16.pth'
+    model = torch.load(checkpoint_path)
+    state_dict = model['state_dict']
+    fc_cls_w = state_dict['bbox_head.fc_cls.weight'].clone()
+    w_s = fc_cls_w.abs().sort(dim=1, descending=True)[0]
+    thresh = w_s[:, 256].reshape(-1, 1).expand_as(fc_cls_w)
+    print((fc_cls_w.abs() < thresh).sum())
+    mask = torch.ones_like(fc_cls_w)
+    mask[fc_cls_w.abs() < thresh] = 0.
+    mask[0, :] = 1.
+
+    cls_ids = (0, 1, 3, 4, 6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19)
+    feat_list = torch.split(mask, 128, 1)
+    for feat in feat_list:
+        class_names = CLASSES
+        if cls_ids is not None:
+            feat = feat[[i+1 for i in cls_ids], :]
+            class_names = [class_names[i] for i in cls_ids]
+        num_cls = feat.shape[0]
+        scale_ls = range(num_cls)
+        label_ls = list(class_names)
+
+        norm = matplotlib.colors.Normalize(vmin=0, vmax=0.25)
+        plt.imshow(feat, cmap='rainbow', norm=norm)
+        plt.colorbar()
+        plt.yticks(scale_ls, label_ls)
+        plt.show()
+    # checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/base/epoch_12.pth'
+    # model = torch.load(checkpoint_path)
+    # model['state_dict']['bbox_head.cls_fc_w_mask'] = mask
+    # new_checkpoint_path = checkpoint_path[:-4] + '_mask' + checkpoint_path[-4:]
+    # torch.save(model, new_checkpoint_path)
+
 if __name__ == '__main__':
-    init_novel_rep(VOC_novel_ids[0])
+    # init_novel_rep(VOC_novel_ids[0])
     # init_weights()
     # change_rep()
+    # remove_res5()
+    # channel_pruning()
+    channel_mask()

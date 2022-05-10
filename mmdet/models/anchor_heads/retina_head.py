@@ -6,6 +6,7 @@ from mmdet.ops import ConvModule
 from ..registry import HEADS
 from ..utils import bias_init_with_prob
 from .anchor_head import AnchorHead
+from mmdet.ops.scale_grad import scale_tensor_gard
 
 
 @HEADS.register_module
@@ -39,6 +40,9 @@ class RetinaHead(AnchorHead):
                  scales_per_octave=3,
                  conv_cfg=None,
                  norm_cfg=None,
+                 base_ids=None,
+                 novel_ids=None,
+                 grad_scale=None,
                  **kwargs):
         self.stacked_convs = stacked_convs
         self.octave_base_scale = octave_base_scale
@@ -48,8 +52,11 @@ class RetinaHead(AnchorHead):
         octave_scales = np.array(
             [2**(i / scales_per_octave) for i in range(scales_per_octave)])
         anchor_scales = octave_scales * octave_base_scale
+        self.base_ids = base_ids
+        self.novel_ids = novel_ids
         super(RetinaHead, self).__init__(
             num_classes, in_channels, anchor_scales=anchor_scales, **kwargs)
+        self.grad_scale = grad_scale
 
     def _init_layers(self):
         self.relu = nn.ReLU(inplace=True)
@@ -75,9 +82,12 @@ class RetinaHead(AnchorHead):
                     padding=1,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg))
+
+        fc_cls_channels = (len(self.base_ids) + len(self.novel_ids)) if self.base_ids is not None else self.cls_out_channels
+        self.fc_cls_channels = fc_cls_channels
         self.retina_cls = nn.Conv2d(
             self.feat_channels,
-            self.num_anchors * self.cls_out_channels,
+            self.num_anchors * fc_cls_channels,
             3,
             padding=1)
         self.retina_reg = nn.Conv2d(
@@ -93,6 +103,8 @@ class RetinaHead(AnchorHead):
         normal_init(self.retina_reg, std=0.01)
 
     def forward_single(self, x):
+        if self.training and (self.grad_scale is not None):
+            x = scale_tensor_gard(x, self.grad_scale)
         cls_feat = x
         reg_feat = x
         for cls_conv in self.cls_convs:
@@ -101,4 +113,9 @@ class RetinaHead(AnchorHead):
             reg_feat = reg_conv(reg_feat)
         cls_score = self.retina_cls(cls_feat)
         bbox_pred = self.retina_reg(reg_feat)
+
+        if self.base_ids is not None:
+            bs, _, w, h = cls_score.shape
+            cls_score = cls_score.reshape(bs, self.num_anchors, self.fc_cls_channels, w, h)[:, :, self.base_ids, :, :]
+            cls_score = cls_score.reshape(bs, -1, w, h)
         return cls_score, bbox_pred

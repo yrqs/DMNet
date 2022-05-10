@@ -68,6 +68,8 @@ class BBoxHead(nn.Module):
         self.base_ids = base_ids
         self.grad_scale = grad_scale
 
+        self.cls_fc_w_mask = nn.Parameter(torch.ones_like(self.fc_cls.weight), requires_grad=False)
+
     def init_weights(self):
         # conv layers are already initialized by ConvModule
         if self.with_cls:
@@ -85,9 +87,9 @@ class BBoxHead(nn.Module):
         if self.with_avg_pool:
             x = self.avg_pool(x)
         x = x.view(x.size(0), -1)
+        self.fc_cls.weight.data = self.fc_cls.weight.data * self.cls_fc_w_mask
         cls_score = self.fc_cls(x) if self.with_cls else None
         bbox_pred = self.fc_reg(x) if self.with_reg else None
-
         if self.base_ids is not None:
             out_channels = [0]
             for id in self.base_ids:
@@ -97,6 +99,9 @@ class BBoxHead(nn.Module):
             if not self.reg_class_agnostic and bbox_pred is not None:
                 bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
 
+        # cls_score = torch.zeros_like(cls_score)
+        # cls_score[:, 1] = 5.
+        # bbox_pred = torch.zeros_like(bbox_pred)
         return cls_score, bbox_pred
 
     def get_target(self, sampling_results, gt_bboxes, gt_labels,

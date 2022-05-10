@@ -7,7 +7,8 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True),
     # dict(type='Expand'),
     # dict(type='MinIoURandomCrop'),
-    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    # dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='Resize', img_scale=(1333, 800), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     # dict(type='Normalize', **img_norm_cfg),
     # dict(type='Pad', size_divisor=32),
@@ -43,11 +44,23 @@ data = dict(
             # ann_file=data_root + 'VOC2007/ImageSets/Main/bottle_test_diy.txt',
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
+
             ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
             img_prefix=data_root + 'VOC2007/',
+
             # ann_file=[
             #     data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
             #     data_root + 'VOC2012/ImageSets/Main/trainval_split1_base.txt'
+            # ],
+
+            # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            # ann_file=[
+            #     data_root + 'VOC2007/ImageSets/Main/trainval_' + '10' + 'shot_novel_standard.txt',
+            #     data_root + 'VOC2012/ImageSets/Main/trainval_' + '10' + 'shot_novel_standard.txt'
+            # ],
+            # ann_file=[
+            #     data_root + 'VOC2007/ImageSets/Main/trainval.txt',
+            #     data_root + 'VOC2012/ImageSets/Main/trainval.txt'
             # ],
             # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),

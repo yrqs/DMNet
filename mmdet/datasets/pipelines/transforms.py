@@ -413,6 +413,35 @@ class Normalize(object):
 
 
 @PIPELINES.register_module
+class FocusCrop(object):
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, results):
+        if np.random.rand() >= self.p:
+            return results
+        # self.crop_size = ()
+        img = results['img']
+        gt_bboxes = results['gt_bboxes']
+        gt_labels = results['gt_labels']
+        target_ind = np.random.randint(0, gt_bboxes.shape[0])
+        gt_bbox = gt_bboxes[target_ind, :]
+        results['gt_labels'] = gt_labels[target_ind:target_ind+1]
+        results['gt_bboxes'] = gt_bboxes[target_ind:target_ind+1, :]
+        img_shape = img.shape
+        x1 = int(max(np.floor(gt_bbox[0]), 0))
+        y1 = int(max(np.floor(gt_bbox[1]), 0))
+        x2 = int(min(np.floor(gt_bbox[2]), img_shape[1] - 1))
+        y2 = int(min(np.floor(gt_bbox[3]), img_shape[0] - 1))
+        img = img[y1:y2, x1:x2]
+        results['gt_bboxes'][0, 0] = x1
+        results['gt_bboxes'][0, 1] = y1
+        results['gt_bboxes'][0, 2] = x2
+        results['gt_bboxes'][0, 3] = y2
+        results['img'] = img
+        return results
+
+@PIPELINES.register_module
 class RandomCrop(object):
     """Random crop the image & bboxes & masks.
 

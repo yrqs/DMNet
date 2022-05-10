@@ -25,6 +25,7 @@ VOC_novel_ids = (
     (3, 7, 13, 16, 17)
 )
 
+norm_cfg = dict(type='BN', requires_grad=False)
 model = dict(
     type='RetinaNet',
     pretrained='/home/luyue/others/resnet101_caffe-3ad79236.pth',
@@ -34,16 +35,16 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='BN', requires_grad=True),
-        style='pytorch'),
+        norm_cfg=norm_cfg,
+        norm_eval=True,
+        style='caffe'),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
         out_channels=256,
         start_level=1,
         add_extra_convs=True,
-        num_outs=5,
-        save_outs=save_outs),
+        num_outs=5),
     bbox_head=dict(
         type='GARetinaDMLHead4',
         num_classes=16,

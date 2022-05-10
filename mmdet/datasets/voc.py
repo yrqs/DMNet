@@ -64,19 +64,18 @@ class VOCDataset(XMLDataset):
             labels = self.get_ann_info(i)['labels']
             if len(labels) == 0:
                 continue
-            if min(img_info['width'], img_info['height']) >= min_size:
-                if self.process_classes is not None:
-                    ann_info = self.get_ann_info(i)
-                    labels_set = set(ann_info['labels'])
-                    have_intersection = labels_set & process_labels
-                    if have_intersection and (self.process_type == 'retain'):
-                        valid_inds.append(i)
-                    elif (not have_intersection) and (self.process_type == 'filter'):
-                        valid_inds.append(i)
-                else:
+            # if min(img_info['width'], img_info['height']) >= min_size:
+            if self.process_classes is not None:
+                ann_info = self.get_ann_info(i)
+                labels_set = set(ann_info['labels'])
+                have_intersection = labels_set & process_labels
+                if have_intersection and (self.process_type == 'retain'):
                     valid_inds.append(i)
+                elif (not have_intersection) and (self.process_type == 'filter'):
+                    valid_inds.append(i)
+            else:
+                valid_inds.append(i)
         return valid_inds
-
 
     def evaluate(self,
                  results,
@@ -122,8 +121,7 @@ class VOCDataset(XMLDataset):
                 gt_bboxes, results, proposal_nums, iou_thr, logger=logger)
             for i, num in enumerate(proposal_nums):
                 for j, iou in enumerate(iou_thr):
-                    eval_results['recall@{}@{}'.format(num, iou)] = recalls[i,
-                                                                            j]
+                    eval_results['recall@{}@{}'.format(num, iou)] = recalls[i, j]
             if recalls.shape[1] > 1:
                 ar = recalls.mean(axis=1)
                 for i, num in enumerate(proposal_nums):
@@ -171,8 +169,7 @@ class VOCDatasetMeta(VOCDataset):
                 gt_bboxes, results, proposal_nums, iou_thr, logger=logger)
             for i, num in enumerate(proposal_nums):
                 for j, iou in enumerate(iou_thr):
-                    eval_results['recall@{}@{}'.format(num, iou)] = recalls[i,
-                                                                            j]
+                    eval_results['recall@{}@{}'.format(num, iou)] = recalls[i, j]
             if recalls.shape[1] > 1:
                 ar = recalls.mean(axis=1)
                 for i, num in enumerate(proposal_nums):
@@ -186,6 +183,7 @@ class VOCDatasetNovel1(VOCDatasetMeta):
 @DATASETS.register_module
 class VOCDatasetNovel2(VOCDatasetMeta):
     CLASSES = ('aeroplane', 'bottle', 'cow', 'horse', 'sofa')
+    # CLASSES = ('bottle',)
 
 @DATASETS.register_module
 class VOCDatasetNovel3(VOCDatasetMeta):

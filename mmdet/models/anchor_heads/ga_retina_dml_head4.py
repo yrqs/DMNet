@@ -12,9 +12,7 @@ from mmdet.core import (AnchorGenerator, anchor_inside_flags, anchor_target,
                         multi_apply, multiclass_nms)
 
 from ..builder import build_loss
-from ..losses import FocalLoss
 
-import random
 import os
 from mmdet.utils.show_feature import show_dis
 
@@ -122,7 +120,7 @@ class DMLHead(nn.Module):
         return cls_score, distances
 
 
-def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=0):
+def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, stride=1):
     emb_list = []
     for i in range(len(emb_channels)):
         if i == 0:
@@ -140,6 +138,9 @@ def build_emb_module(input_channels, emb_channels, kernel_size=1, padding=0, str
             normal_init(m, std=0.01)
         elif isinstance(m, nn.BatchNorm2d):
             constant_init(m, 1)
+            # m.eval()
+            # for p in m.parameters():
+            #     p.requires_grad = False
 
     return nn.Sequential(*tuple(emb_list))
 
@@ -155,6 +156,8 @@ class GARetinaDMLHead4(GuidedAnchorHead):
                  cls_stacked_convs=None,
                  grad_scale=None,
                  decoupled_cls_reg=False,
+                 reg_loc=False,
+                 cls_adp_relu=True,
                  cls_emb_head_cfg=dict(
                      emb_channels=(256, 128),
                      num_modes=1,
@@ -171,6 +174,8 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         self.cls_emb_head_cfg = cls_emb_head_cfg
         self.grad_scale = grad_scale
         self.decoupled_cls_reg = decoupled_cls_reg
+        self.reg_loc = reg_loc
+        self.cls_adp_relu = cls_adp_relu
         super(GARetinaDMLHead4, self).__init__(num_classes, in_channels, **kwargs)
         self.loss_emb = build_loss(loss_emb)
         self.save_outs = save_outs
@@ -257,11 +262,19 @@ class GARetinaDMLHead4(GuidedAnchorHead):
         for reg_conv in self.reg_convs:
             reg_feat = reg_conv(reg_feat)
 
-        loc_pred = self.conv_loc(cls_feat)
+        if self.reg_loc:
+            loc_pred = self.conv_loc(reg_feat)
+        else:
+            loc_pred = self.conv_loc(cls_feat)
         shape_pred = self.conv_shape(reg_feat)
 
-        cls_feat_adp = self.feature_adaption_cls(cls_feat, shape_pred)
+
+        cls_feat_adp = self.feature_adaption_cls(cls_feat, shape_pred, self.cls_adp_relu)
         reg_feat_adp = self.feature_adaption_reg(reg_feat, shape_pred)
+
+        # if self.training and (self.grad_scale is not None):
+        #     cls_feat_adp = scale_tensor_gard(cls_feat_adp, self.grad_scale)
+        #     reg_feat_adp = scale_tensor_gard(reg_feat_adp, self.grad_scale)
 
         if not self.training:
             mask = loc_pred.sigmoid()[0] >= self.loc_filter_thr

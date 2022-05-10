@@ -9,7 +9,7 @@ lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.00025
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 split_num = 1
 
@@ -42,8 +42,7 @@ model = dict(
         out_channels=256,
         start_level=1,
         add_extra_convs=True,
-        num_outs=5,
-        save_outs=save_outs),
+        num_outs=5),
     bbox_head=dict(
         type='GARetinaDMLHead17',
         num_classes=16,
@@ -77,11 +76,10 @@ model = dict(
             loss_weight=1.0),
         loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
         loss_cls=dict(
-            type='VarifocalLoss',
+            type='FocalLoss',
             use_sigmoid=True,
-            alpha=0.75,
             gamma=2.0,
-            iou_weighted=False,
+            alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))
@@ -166,6 +164,8 @@ data = dict(
             ann_file=[
                 data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
                 data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
+                # data_root + 'VOC2007/ImageSets/Main/trainval.txt',
+                # data_root + 'VOC2012/ImageSets/Main/trainval.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),

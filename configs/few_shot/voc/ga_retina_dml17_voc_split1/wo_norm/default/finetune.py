@@ -1,8 +1,8 @@
 # model settings
 save_outs = False
 shot = 1
-shot_idx = [1, 2, 3, 5, 10].index(shot)
-train_repeat_times = [30, 25, 20, 15, 10][shot_idx]
+shot_idx = [1, 2, 3, 5, 10]
+train_repeat_times = [30, 25, 20, 15, 10]
 freeze = False
 freeze1 = False
 neg_pos_ratio = 3
@@ -13,12 +13,12 @@ stacked_convs = 2
 
 alpha = 0.15
 
-warmup_iters = 500
+warmup_iters = 500 // 8
 lr_step = [10, 14, 16]
 interval = 4
 lr_base = 0.0001
 imgs_per_gpu = 2
-gpu_num = 4
+gpu_num = 8
 
 model = dict(
     type='RetinaNet',
@@ -37,8 +37,7 @@ model = dict(
         out_channels=256,
         start_level=1,
         add_extra_convs=True,
-        num_outs=5,
-        save_outs=save_outs),
+        num_outs=5),
     bbox_head=dict(
         type='GARetinaDMLHead17',
         num_classes=21,
@@ -69,11 +68,10 @@ model = dict(
             loss_weight=1.0),
         loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
         loss_cls=dict(
-            type='VarifocalLoss',
+            type='FocalLoss',
             use_sigmoid=True,
-            alpha=0.75,
             gamma=2.0,
-            iou_weighted=False,
+            alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='RepMetLoss', alpha=alpha, loss_weight=1.0)))

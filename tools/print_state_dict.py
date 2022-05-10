@@ -11,9 +11,14 @@ import torch
 # checkpoint_path = '/home/luyue/Documents/mmdetection_old/work_dirs/test/epoch_2.pth'
 # checkpoint_path = '/home/luyue/.cache/torch/checkpoints/resnet101_caffe-3ad79236.pth'
 # checkpoint_path = 'work_dirs/retina_dml3_coco/base_aug/norm/base/epoch_24.pth'
-checkpoint_path = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
-
+# checkpoint_path = 'work_dirs/ga_retina_dml12_voc_split1/wo_norm/base/epoch_16.pth'
+# checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/base/epoch_12.pth'
+# checkpoint_path = '/home/luyue/.cache/torch/checkpoints/resnet101-5d3b4d8f_wo_res5.pth'
+# checkpoint_path = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
+checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/aug2/base/epoch_12.pth'
 checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
 
 for key in checkpoint['state_dict'].keys():
     print(key)
+# for key in checkpoint.keys():
+#     print(key)

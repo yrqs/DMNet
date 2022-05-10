@@ -8,6 +8,7 @@ from mmdet.ops import nms
 from ..registry import HEADS
 from .anchor_head import AnchorHead
 from mmdet.ops.scale_grad import scale_tensor_gard
+from mmdet.models.subnets.channel_transform import AffineLayer
 
 @HEADS.register_module
 class RPNHead(AnchorHead):
@@ -15,9 +16,13 @@ class RPNHead(AnchorHead):
     def __init__(self,
                  in_channels,
                  grad_scale=None,
+                 use_affine=False,
                  **kwargs):
         super(RPNHead, self).__init__(2, in_channels, **kwargs)
         self.grad_scale = grad_scale
+        self.use_affine = use_affine
+        if use_affine:
+            self.affine_layer = AffineLayer(in_channels, bias=True)
 
     def _init_layers(self):
         self.rpn_conv = nn.Conv2d(
@@ -34,6 +39,9 @@ class RPNHead(AnchorHead):
     def forward_single(self, x):
         if self.training and (self.grad_scale is not None):
             x = scale_tensor_gard(x, self.grad_scale)
+
+        if self.use_affine:
+            x = self.affine_layer(x)
 
         x = self.rpn_conv(x)
         x = F.relu(x, inplace=True)
