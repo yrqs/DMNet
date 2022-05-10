@@ -145,7 +145,6 @@ class FSBBoxHead3(nn.Module):
     def loss(self,
              cls_score,
              bbox_pred,
-             extra,
              labels,
              label_weights,
              bbox_targets,
