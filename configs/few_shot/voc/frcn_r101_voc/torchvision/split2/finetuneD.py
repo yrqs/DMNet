@@ -6,7 +6,7 @@ warmup_iters = 10
 lr_step = [10, 14, 16]
 interval = 16
 lr_base = 0.00075
-imgs_per_gpu = 1
+imgs_per_gpu = 2
 gpu_num = 8
 
 split_num = 2
@@ -132,8 +132,8 @@ test_cfg = dict(
     rcnn=dict(
         score_thr=0.05, nms=dict(type='nms', iou_thr=0.5), max_per_img=100))
 # dataset settings
-dataset_type = 'VOCDatasetNovel2'
-# dataset_type = 'VOCDataset'
+# dataset_type = 'VOCDatasetNovel2'
+dataset_type = 'VOCDataset'
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -141,9 +141,9 @@ train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Resize', img_scale=[
-        (1333, 480), (1333, 512), (1333, 544), (1333, 576), (1333, 608),
-        (1333, 640), (1333, 672), (1333, 704), (1333, 736), (1333, 768),
-        (1333, 800)], multiscale_mode='value', keep_ratio=True),
+        (1000, 302), (1000, 334), (1000, 376), (1000, 408),
+        (1000, 440), (1000, 472), (1000, 504), (1000, 536),
+        (1000, 568), (1000, 600)], multiscale_mode='value', keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -154,7 +154,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
+        img_scale=(1000, 600),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -206,7 +206,7 @@ lr_config = dict(
 checkpoint_config = dict(interval=lr_step[2])
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=25,
     hooks=[
         dict(type='TextLoggerHook'),
         # dict(type='TensorboardLoggerHook')

@@ -29,6 +29,7 @@ class FSCACBBoxHead(nn.Module):
                  novel_ids=None,
                  grad_scale=None,
                  alpha=10,
+                 loss_center_weight=0.1,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -71,6 +72,10 @@ class FSCACBBoxHead(nn.Module):
 
         self.cls_fc_w_mask = nn.Parameter(torch.ones_like(self.fc_cls.weight), requires_grad=False)
 
+        fc_cls_channels = (len(base_ids) + len(novel_ids) + 1) if base_ids is not None else num_classes
+        self.class_centers = nn.Parameter(torch.eye(fc_cls_channels), requires_grad=False)
+        self.alpha = alpha
+        self.loss_center_weight = loss_center_weight
 
     def init_weights(self):
         # conv layers are already initialized by ConvModule
@@ -96,15 +101,17 @@ class FSCACBBoxHead(nn.Module):
             out_channels = [0]
             for id in self.base_ids:
                 out_channels.append(id+1)
-            if cls_score is not None:
-                cls_score = cls_score[:, out_channels]
+            # if cls_score is not None:
+            #     cls_score = cls_score[:, out_channels]
             if not self.reg_class_agnostic and bbox_pred is not None:
                 bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
-
-        # cls_score = torch.zeros_like(cls_score)
-        # cls_score[:, 1] = 5.
-        # bbox_pred = torch.zeros_like(bbox_pred)
-        return cls_score, bbox_pred
+            class_centers = self.class_centers[out_channels, :]
+        else:
+            class_centers = self.class_centers
+        cls_score = cls_score[:, None, :].expand(-1, self.num_classes, -1)
+        class_centers = class_centers[None, :, :].expand_as(cls_score)
+        dis = torch.norm((cls_score - self.alpha * class_centers), dim=2, p=2)
+        return -dis, bbox_pred
 
     def get_target(self, sampling_results, gt_bboxes, gt_labels,
                    rcnn_train_cfg):
@@ -144,6 +151,9 @@ class FSCACBBoxHead(nn.Module):
                     avg_factor=avg_factor,
                     reduction_override=reduction_override)
                 losses['acc'] = accuracy(cls_score, labels)
+            labels_oh = F.one_hot(labels, num_classes=self.num_classes)
+            losses['loss_center'] = (-cls_score[labels_oh]).mean() * self.loss_center_weight
+
         if bbox_pred is not None:
             pos_inds = labels > 0
             if pos_inds.any():

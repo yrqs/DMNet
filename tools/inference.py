@@ -13,6 +13,8 @@ import matplotlib.colors
 import matplotlib.pyplot as plt
 import math
 
+from sklearn import manifold
+
 CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
            'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
            'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
@@ -44,6 +46,26 @@ def frcn_roi_cls(detector, img, return_spicial_att=False):
             return x_vector, spicial_att_res
         else:
             return x_vector
+
+def frcn_bbox_roi_cls(detector, img):
+    with torch.no_grad():
+        cfg = detector.cfg
+        device = next(detector.parameters()).device  # model device
+        # build the data pipeline
+        test_pipeline = [LoadImage()] + cfg.data.test.pipeline[1:]
+        test_pipeline = Compose(test_pipeline)
+        # prepare data
+        data = dict(img=img)
+        data = test_pipeline(data)
+        data = scatter(collate([data], samples_per_gpu=1), [device])[0]
+        input_x = data['img'][0]
+        x_c3 = detector.backbone(input_x)
+        rois = torch.tensor([[0., 0, 0, input_x.size(3) - 1, input_x.size(2) - 1]]).to(input_x.device)
+        x_pool = detector.bbox_roi_extractor(x_c3, rois.float())
+        x_c5 = detector.shared_head(x_pool)
+        x_c5_pool = detector.bbox_head.avg_pool(x_c5)
+        x_c5_pool = x_c5_pool.view(x_c5_pool.size(0), -1)
+        return x_c5_pool
 
 def frcn_rois_cls(detector, img, roi_offsets):
     with torch.no_grad():
@@ -206,6 +228,43 @@ def plot_att(att):
         plt.xlabel('{}'.format(i))
 
 
+def show_vectors_TSNE(vectors):
+    tsne = manifold.TSNE(n_components=2, init='pca', perplexity=20, n_iter=5000)
+    X_tsne = tsne.fit_transform(vectors)
+
+    x_min, x_max = X_tsne.min(0), X_tsne.max(0)
+    X_norm = (X_tsne - x_min) / (x_max - x_min)  # 归一化
+    plt.figure(figsize=(6, 6))
+
+    # ss = ['.' for _ in range(X_norm.shape[0] - 20)]
+
+    # mscatter(X_norm[:-20, 0], X_norm[:-20, 1], c=range(X_norm.shape[0] - len(CLASSES_VOC)), s=100, cmap='rainbow',
+    #          m=ss)
+
+    plt.scatter(X_norm[:, 0], X_norm[:, 1], color='r')
+
+    # for i in range(20):
+    #     plt.text(X_norm[-20 + i, 0], X_norm[-20 + i, 1], CLASSES_VOC[i], color='r',
+    #              fontdict={'weight': 'bold', 'size': 9})
+    # for i in range(X_norm.shape[0]):
+    #     plt.text(X_norm[i, 0], X_norm[i, 1], CLASSES[y[i]], color=select_color(y[i]),
+    #              fontdict={'weight': 'bold', 'size': 9})
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
+
+def multi_class_multi_img(detector):
+    instance_root = 'mytest/voc_instances/trainval_10shot'
+    # class_names = ['cow', 'sheep', 'horse']
+    class_names = CLASSES
+    # img_scale = (128, 128)
+    img_scale = (256, 256)
+    res = []
+    detector.cfg.data.test.pipeline[1]['img_scale'] = img_scale
+    img_name = '0.jpg'
+    for class_name in class_names:
+        img = os.path.join(instance_root, class_name, img_name)
+        res.append(frcn_roi_cls(detector, img))
 
 if __name__ == '__main__':
     # config = 'configs/few_shot/voc/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/finetuneDF.py'

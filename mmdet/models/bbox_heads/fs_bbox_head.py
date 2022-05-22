@@ -370,6 +370,7 @@ class FSBBoxHead(nn.Module):
                         avg_factor=avg_factor,
                         reduction_override=reduction_override)
                 losses['acc'] = accuracy(cls_score, labels)
+                losses['fg_acc'] = accuracy(cls_score[labels>0], labels[labels>0])
         if bbox_pred is not None:
             pos_inds = labels > 0
             if pos_inds.any():

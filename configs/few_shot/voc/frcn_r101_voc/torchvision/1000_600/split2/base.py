@@ -139,9 +139,9 @@ train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Resize', img_scale=[
-        (1333, 480), (1333, 512), (1333, 544), (1333, 576), (1333, 608),
-        (1333, 640), (1333, 672), (1333, 704), (1333, 736), (1333, 768),
-        (1333, 800)], multiscale_mode='value', keep_ratio=True),
+        (1000, 302), (1000, 334), (1000, 376), (1000, 408),
+        (1000, 440), (1000, 472), (1000, 504), (1000, 536),
+        (1000, 568), (1000, 600)], multiscale_mode='value', keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -152,7 +152,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1333, 800),
+        img_scale=(1000, 600),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),

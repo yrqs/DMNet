@@ -9,6 +9,9 @@ from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
 from mmdet.ops.scale_grad import scale_tensor_gard
+from mmdet.core.bbox.geometry import bbox_overlaps
+
+from mmdet.utils.print_score import print_voc_score
 
 @HEADS.register_module
 class BBoxHead(nn.Module):
@@ -28,6 +31,15 @@ class BBoxHead(nn.Module):
                  base_ids=None,
                  novel_ids=None,
                  grad_scale=None,
+                 neg_cls=False,
+                 hn_thresh=(0.2, 0.4),
+                 enhance_hn=False,
+                 enhance_hn_thresh=0.1,
+                 enhance_hn_weight=1.0,
+                 img_classification=False,
+                 global_attention=False,
+                 global_info=False,
+                 nhead=8,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -58,7 +70,10 @@ class BBoxHead(nn.Module):
             in_channels *= self.roi_feat_area
         if self.with_cls:
             fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
-            self.fc_cls = nn.Linear(in_channels, fc_cls_channels)
+            if global_info:
+                self.fc_cls = nn.Linear(in_channels * 2, fc_cls_channels)
+            else:
+                self.fc_cls = nn.Linear(in_channels, fc_cls_channels)
         if self.with_reg:
             fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
             out_dim_reg = 4 if reg_class_agnostic else 4 * fc_cls_channels
@@ -68,28 +83,83 @@ class BBoxHead(nn.Module):
         self.base_ids = base_ids
         self.grad_scale = grad_scale
 
+        self.enhance_hn = enhance_hn
+        self.enhance_hn_thresh = enhance_hn_thresh
+        self.enhance_hn_weight = enhance_hn_weight
+
+        self.img_classification = img_classification
+        if img_classification:
+            img_cls_channels = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes - 1
+            self.img_cls = nn.Linear(in_channels, img_cls_channels)
+
+        self.global_attention = global_attention
+        if global_attention:
+            self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
+
+        self.global_info = global_info
+        if global_info:
+            self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
+
+        self.neg_cls = neg_cls
+        self.hn_thresh = hn_thresh
+        if neg_cls:
+            fc_cls_channels = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes - 1
+            self.neg_fc_cls = nn.Linear(in_channels, fc_cls_channels)
+
         self.cls_fc_w_mask = nn.Parameter(torch.ones_like(self.fc_cls.weight), requires_grad=False)
+        # for p in self.img_cls.parameters():
+        #     p.requires_grad = False
 
     def init_weights(self):
         # conv layers are already initialized by ConvModule
         if self.with_cls:
             nn.init.normal_(self.fc_cls.weight, 0, 0.01)
             nn.init.constant_(self.fc_cls.bias, 0)
+        if self.neg_cls:
+            nn.init.normal_(self.neg_fc_cls.weight, 0, 0.01)
+            nn.init.constant_(self.neg_fc_cls.bias, 0)
+        if self.img_classification:
+            nn.init.normal_(self.img_cls.weight, 0, 0.01)
+            nn.init.constant_(self.img_cls.bias, 0)
         if self.with_reg:
             nn.init.normal_(self.fc_reg.weight, 0, 0.001)
             nn.init.constant_(self.fc_reg.bias, 0)
 
     @auto_fp16()
-    def forward(self, x):
+    def forward(self, x, extra=None):
         if self.training and (self.grad_scale is not None):
             x = scale_tensor_gard(x, self.grad_scale)
+        extra_return = None
 
         if self.with_avg_pool:
             x = self.avg_pool(x)
         x = x.view(x.size(0), -1)
-        self.fc_cls.weight.data = self.fc_cls.weight.data * self.cls_fc_w_mask
-        cls_score = self.fc_cls(x) if self.with_cls else None
-        bbox_pred = self.fc_reg(x) if self.with_reg else None
+        cls_feat = x
+        reg_feat = x
+        # self.fc_cls.weight.data = self.fc_cls.weight.data * self.cls_fc_w_mask
+        if self.global_attention:
+            x_global = extra
+            if self.training and (self.grad_scale is not None):
+                x_global = scale_tensor_gard(x_global, self.grad_scale)
+            x_global_avg = self.global_avg_pool(x_global).flatten(1)
+            x_global_max = self.global_max_pool(x_global).flatten(1)
+            bs = x_global_avg.shape[0]
+            cls_feat = cls_feat.reshape(bs, -1, self.in_channels)
+            att = (x_global_avg + 0.2 * x_global_max).tanh().detach()
+            cls_feat = cls_feat * att[:, None, :].expand_as(cls_feat)
+            cls_feat = cls_feat.reshape(-1, self.in_channels)
+        if self.global_info:
+            x_global = extra
+            if self.training and (self.grad_scale is not None):
+                x_global = scale_tensor_gard(x_global, self.grad_scale)
+            x_global_avg = self.global_avg_pool(x_global).flatten(1).expand_as(cls_feat)
+            # x_global_max = self.global_max_pool(x_global).flatten(1).expand_as(cls_feat)s
+            cls_feat = torch.cat([cls_feat, x_global_avg], dim=1)
+
+        cls_score = self.fc_cls(cls_feat) if self.with_cls else None
+        bbox_pred = self.fc_reg(reg_feat) if self.with_reg else None
         if self.base_ids is not None:
             out_channels = [0]
             for id in self.base_ids:
@@ -99,10 +169,38 @@ class BBoxHead(nn.Module):
             if not self.reg_class_agnostic and bbox_pred is not None:
                 bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
 
+        if self.neg_cls:
+            neg_cls_score = self.neg_fc_cls(cls_feat)
+            if self.base_ids is not None:
+                neg_cls_score = neg_cls_score[:, self.base_ids]
+            if self.training:
+                cls_score = torch.cat([cls_score, neg_cls_score], dim=1)
+            else:
+                bg_score = cls_score[:, :1]
+                bg_score = torch.cat([bg_score, neg_cls_score], dim=1).max(1, keepdim=True)[0]
+                cls_score = torch.cat([bg_score, cls_score[:, 1:]], dim=1)
+
+        if self.img_classification:
+            img_labels = extra
+            img_cls_score = self.img_cls(x)
+            if self.base_ids is not None:
+                img_cls_score = img_cls_score[:, self.base_ids]
+            img_cls_score = img_cls_score.softmax(0) * img_cls_score.softmax(1)
+            img_cls_score = img_cls_score.sum(0, keepdim=True)
+            # img_cls_score = cls_score.softmax(0) * cls_score.softmax(1)
+            # print(img_cls_score.shape)
+            # img_cls_score = img_cls_score.sum(0, keepdim=True)[:, 1:]
+            # print(img_cls_score.shape)
+            extra_return = (img_cls_score, img_labels)
         # cls_score = torch.zeros_like(cls_score)
         # cls_score[:, 1] = 5.
         # bbox_pred = torch.zeros_like(bbox_pred)
-        return cls_score, bbox_pred
+        if self.training:
+            return cls_score, bbox_pred, extra_return
+        else:
+            if self.img_classification:
+                return (cls_score, img_cls_score), bbox_pred
+            return cls_score, bbox_pred
 
     def get_target(self, sampling_results, gt_bboxes, gt_labels,
                    rcnn_train_cfg):
@@ -111,7 +209,7 @@ class BBoxHead(nn.Module):
         pos_gt_bboxes = [res.pos_gt_bboxes for res in sampling_results]
         pos_gt_labels = [res.pos_gt_labels for res in sampling_results]
         reg_classes = 1 if self.reg_class_agnostic else self.num_classes
-        cls_reg_targets = bbox_target(
+        labels, label_weights, bbox_targets, bbox_weights = bbox_target(
             pos_proposals,
             neg_proposals,
             pos_gt_bboxes,
@@ -119,19 +217,55 @@ class BBoxHead(nn.Module):
             rcnn_train_cfg,
             reg_classes,
             target_means=self.target_means,
-            target_stds=self.target_stds)
-        return cls_reg_targets
+            target_stds=self.target_stds,
+            concat=False)
+        if self.neg_cls:
+            num_img = len(sampling_results)
+            for i in range(num_img):
+                num_pos = pos_proposals[i].size(0)
+                overlaps = bbox_overlaps(gt_bboxes[i], neg_proposals[i])
+                max_overlaps, argmax_overlaps = overlaps.max(dim=0)
+                hn_inds = (max_overlaps >= self.hn_thresh[0]) & (max_overlaps < self.hn_thresh[1])
+                neg_labels = labels[i][num_pos:]
+                neg_labels[hn_inds] = -gt_labels[i][argmax_overlaps[hn_inds]]
+                labels[i] = torch.cat([labels[i][:num_pos], neg_labels], dim=0)
+        labels = torch.cat(labels, 0)
+        label_weights = torch.cat(label_weights, 0)
+        bbox_targets = torch.cat(bbox_targets, 0)
+        bbox_weights = torch.cat(bbox_weights, 0)
+        return (labels, label_weights, bbox_targets, bbox_weights)
 
-    @force_fp32(apply_to=('cls_score', 'bbox_pred'))
+    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'extra'))
     def loss(self,
              cls_score,
              bbox_pred,
+             extra,
              labels,
              label_weights,
              bbox_targets,
              bbox_weights,
              reduction_override=None):
         losses = dict()
+        if self.img_classification:
+            img_cls_score, img_labels = extra
+            img_label_bce = []
+            print(img_labels)
+            for l in img_labels:
+                if l.shape[0] > 0:
+                    l_oh = F.one_hot(l, num_classes=self.num_classes)[:, 1:]
+                    img_label_bce.append(l_oh.sum(0, keepdim=True))
+            # print(img_cls_score.shape)
+            # print(torch.cat(img_label_bce, dim=0).float().shape)
+            if len(img_label_bce) > 0:
+                img_label_bce = torch.cat(img_label_bce, dim=0).float()
+                losses['loss_img_cls'] = F.binary_cross_entropy(img_cls_score, img_label_bce)
+            else:
+                losses['loss_img_cls'] = torch.zeros(1).to(cls_score.device)
+
+        if self.neg_cls:
+            hn_inds = labels < 0
+            labels[hn_inds] = -labels[hn_inds] + self.num_classes - 1
+
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
             if cls_score.numel() > 0:
@@ -142,6 +276,29 @@ class BBoxHead(nn.Module):
                     avg_factor=avg_factor,
                     reduction_override=reduction_override)
                 losses['acc'] = accuracy(cls_score, labels)
+                losses['fg_acc'] = accuracy(cls_score[labels > 0], labels[labels > 0])
+
+                if self.enhance_hn:
+                    cls_score_softmax = F.softmax(cls_score)
+                    predict_cls = cls_score_softmax.max(dim=1)[1]
+                    hn_ind = predict_cls != labels
+                    hn_cls_score_softmax = cls_score_softmax[hn_ind]
+                    hn_labels = predict_cls[hn_ind]
+                    # print(hn_labels)
+                    # print(labels[hn_ind])
+                    hn_labels_oh = F.one_hot(hn_labels, num_classes=self.num_classes).byte()
+                    # print('============1==============')
+                    # print(hn_cls_score_softmax.shape)
+                    # print(hn_labels_oh.shape)
+                    hn_samples = hn_cls_score_softmax[hn_labels_oh]
+                    # print(hn_samples.shape)
+                    hn_samples = hn_samples[hn_samples >= self.enhance_hn_thresh]
+                    if hn_samples.shape[0] > 0:
+                    # print(hn_samples.shape)
+                        losses['loss_enhance_hn'] = hn_samples.mean() * self.enhance_hn_weight
+                    else:
+                        losses['loss_enhance_hn'] = torch.zeros(1).to(cls_score.device)
+
         if bbox_pred is not None:
             pos_inds = labels > 0
             if pos_inds.any():
@@ -170,9 +327,16 @@ class BBoxHead(nn.Module):
                        scale_factor,
                        rescale=False,
                        cfg=None):
+        if self.img_classification:
+            cls_score, img_cls_score = cls_score
+            # img_cls_score = img_cls_score.sigmoid()
+            assert img_cls_score.shape[0] == 1
+
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
         scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
+        # if self.img_classification:
+        #     scores[:, 1:] = scores[:, 1:] * img_cls_score.expand_as(scores[:, 1:])
 
         if bbox_pred is not None:
             bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,

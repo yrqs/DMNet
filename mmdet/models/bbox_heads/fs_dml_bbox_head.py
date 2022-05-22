@@ -9,53 +9,12 @@ from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
 from mmdet.ops.scale_grad import scale_tensor_gard
-from mmdet.models.subnets.channel_transform import ChannelAttention
-from mmdet.utils.show_feature import show_feature
 
-from mmcv.cnn import normal_init, constant_init
-
-class DMLHead(nn.Module):
-    def __init__(self,
-                 num_reps,
-                 in_channels,
-                 sigma=0.5,
-                 scale=4.,
-                 base_ids=None,
-                 novel_ids=None):
-        super().__init__()
-        self.in_channels = in_channels
-        self.num_reps = num_reps
-        self.sigma = sigma
-        self.scale = scale
-        self.rep_fc = nn.Linear(1, self.num_reps * in_channels)
-        self.representations = nn.Parameter(torch.zeros(self.num_reps, in_channels), requires_grad=False)
-        normal_init(self.rep_fc, std=0.01)
-        self.base_ids = base_ids
-        self.novel_ids = novel_ids
-
-    def forward(self, x):
-        x_norm = F.normalize(x, p=2, dim=1)
-
-        if self.training:
-            reps = self.rep_fc(torch.tensor(1.0).to(x.device).unsqueeze(0)).squeeze(0)
-            reps  = reps.view(self.num_reps, self.in_channels)
-            reps = F.normalize(reps, p=2, dim=1)
-            self.representations.data = reps.detach()
-        else:
-            reps = self.representations.detach()
-
-        if self.base_ids is not None:
-            reps = reps[self.base_ids, :]
-
-        reps_ex = reps[None, :, :].expand(x_norm.size(0), -1, -1)
-        x_norm_ex = x_norm[:, None, :].expand_as(reps_ex)
-
-        distances = torch.sqrt(((x_norm_ex - reps_ex)**2).sum(-1))
-        fg_prob = torch.exp(-(distances)**2/(2.0*self.sigma**2))
-        bg_prob = torch.sub(1, fg_prob.max(dim=1, keepdim=True)[0])
-        prob = torch.cat([bg_prob, fg_prob], dim=1)
-        cls_score = prob / prob.sum(1, keepdim=True)
-        return cls_score, distances
+def inverse_sigmoid(x, eps=1e-5):
+    x = x.clamp(min=0, max=1)
+    x1 = x.clamp(min=eps)
+    x2 = (1 - x).clamp(min=eps)
+    return torch.log(x1/x2)
 
 @HEADS.register_module
 class FSDMLBBoxHead(nn.Module):
@@ -72,24 +31,13 @@ class FSDMLBBoxHead(nn.Module):
                  target_means=[0., 0., 0., 0.],
                  target_stds=[0.1, 0.1, 0.2, 0.2],
                  reg_class_agnostic=False,
-                 dropout_ratio=None,
-                 scale=4.,
-                 dml_alpha=0.3,
-                 cls_w_l1_regular=False,
-                 cls_w_l1_regular_loss_weight=1e-3,
-                 cls_w_bg_fg_mutex=False,
-                 bg_fg_mutex_scale=1.,
-                 add_cos=False,
-                 cls_w_att=False,
-                 detach=True,
-                 freeze_att=False,
-                 alpha=1.,
-                 use_channel_attention=False,
-                 channel_attention_loss_weight=1.,
-                 freeze_channel_attention=False,
                  base_ids=None,
                  novel_ids=None,
                  grad_scale=None,
+                 sigma=0.5,
+                 spicial_att=False,
+                 triplet_margin=None,
+                 triplet_loss_weight=1.0,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -110,7 +58,13 @@ class FSDMLBBoxHead(nn.Module):
         self.reg_class_agnostic = reg_class_agnostic
         self.fp16_enabled = False
 
-        self.loss_cls = build_loss(loss_cls)
+        # self.loss_cls = build_loss(loss_cls)
+        self.loss_cls = build_loss(dict(
+            type='FocalLoss',
+            use_sigmoid=True,
+            gamma=2.0,
+            alpha=0.25,
+            loss_weight=1.0))
         self.loss_bbox = build_loss(loss_bbox)
 
         in_channels = self.in_channels
@@ -118,55 +72,35 @@ class FSDMLBBoxHead(nn.Module):
             self.avg_pool = nn.AvgPool2d(self.roi_feat_size)
         else:
             in_channels *= self.roi_feat_area
-
-        self.use_channel_attention = use_channel_attention
-        self.channel_attention_loss_weight = channel_attention_loss_weight
-        if use_channel_attention:
-            self.cls_channel_attention = ChannelAttention(in_channels, freeze=freeze_channel_attention)
-            self.reg_channel_attention = ChannelAttention(in_channels, freeze=freeze_channel_attention)
-
-        self.spicial_att = nn.Conv2d(in_channels, 1, kernel_size=1, stride=1, padding=0)
-        if freeze_att:
-            self.spicial_att.eval()
-            for p in self.spicial_att.parameters():
-                p.requires_grad = False
-
         if self.with_cls:
-            num_reps = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes
-            self.cls_head = DMLHead(num_reps, in_channels, scale=scale, base_ids=base_ids, novel_ids=novel_ids)
-
+            fc_cls_channels = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes - 1
+            self.fc_cls = nn.Linear(in_channels, fc_cls_channels, bias=False)
         if self.with_reg:
             fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
             out_dim_reg = 4 if reg_class_agnostic else 4 * fc_cls_channels
             self.fc_reg = nn.Linear(in_channels, out_dim_reg)
         self.debug_imgs = None
 
-        self.dml_alpha = dml_alpha
-
-        self.dropout_ratio = dropout_ratio
         self.base_ids = base_ids
-        self.novel_ids = novel_ids
         self.grad_scale = grad_scale
-        self.alpha = alpha
-        self.detach = detach
-        self.cls_w_att = cls_w_att
-        self.add_cos = add_cos
-        self.cls_w_l1_regular = cls_w_l1_regular
-        self.cls_w_l1_regular_loss_weight = cls_w_l1_regular_loss_weight
-        self.cls_w_bg_fg_mutex = cls_w_bg_fg_mutex
-        self.bg_fg_mutex_scale = bg_fg_mutex_scale
-        if add_cos:
-            fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
-            self.cos_cls = nn.Linear(in_channels, fc_cls_channels, bias=False)
+
+        self.sigma = sigma
+
+        self.spicial_att = spicial_att
+        if spicial_att:
+            self.spicial_att_conv = nn.Conv2d(in_channels, 1, kernel_size=1, stride=1, padding=0)
+
+        self.triplet_margin = triplet_margin
+        self.triplet_loss_weight = triplet_loss_weight
 
     def init_weights(self):
+        if self.spicial_att:
+            nn.init.normal_(self.spicial_att_conv.weight, 0, 0.01)
+            nn.init.constant_(self.spicial_att_conv.bias, 0)
         # conv layers are already initialized by ConvModule
-        nn.init.normal_(self.spicial_att.weight, 0, 0.01)
-        nn.init.constant_(self.spicial_att.bias, 0)
-
-        # if self.with_cls:
-        #     nn.init.normal_(self.fc_cls.weight, 0, 0.01)
-        #     nn.init.constant_(self.fc_cls.bias, 0)
+        if self.with_cls:
+            nn.init.normal_(self.fc_cls.weight, 0, 0.01)
+            # nn.init.constant_(self.fc_cls.bias, 0)
         if self.with_reg:
             nn.init.normal_(self.fc_reg.weight, 0, 0.001)
             nn.init.constant_(self.fc_reg.bias, 0)
@@ -175,82 +109,50 @@ class FSDMLBBoxHead(nn.Module):
     def forward(self, x):
         if self.training and (self.grad_scale is not None):
             x = scale_tensor_gard(x, self.grad_scale)
+
         bs, c, w, h = x.shape
-
-        x_avg_pool = self.avg_pool(x).reshape(bs, -1)
-
-        in_feat = x.detach() if self.detach else x
-        spicial_att = self.spicial_att(in_feat).reshape(bs, 1 , -1).softmax(-1)
-        # show_feature(spicial_att[None, None, :, 0, :], use_sigmoid=False, bar_scope=(0, 1))
-        x = x.reshape(bs, c, -1)
-        x = x * spicial_att
-        x = x.sum(-1)
-
-        x = self.alpha * x + (1 - self.alpha) * x_avg_pool
-
-        if self.use_channel_attention:
-            cls_feat = self.cls_channel_attention(x, dim=1)
-            reg_feat = self.reg_channel_attention(x, dim=1)
+        extra_return = None
+        if self.spicial_att:
+            spicial_att = self.spicial_att_conv(x).reshape(bs, 1 , -1).softmax(-1)
+            # show_feature(spicial_att[None, None, :, 0, :], use_sigmoid=False, bar_scope=(0, 1))
+            x = x.reshape(bs, c, -1)
+            x = x * spicial_att
+            x = x.sum(-1)
         else:
-            cls_feat = x
-            reg_feat = x
+            if self.with_avg_pool:
+                x = self.avg_pool(x)
+            x = x.view(x.size(0), -1)
+        # cls_score = self.fc_cls(x) if self.with_cls else None
+        cls_feat = x
+        reg_feat = x
 
-        if self.dropout_ratio is not None:
-            cls_feat = F.dropout(cls_feat, self.dropout_ratio, training=self.training)
-
-        if self.cls_w_att:
-            if self.base_ids is not None:
-                out_channels = []
-                w_att = torch.zeros_like(self.fc_cls.weight.data, device=x.device)
-                for id in self.base_ids:
-                    out_channels.append(id+1)
-                w_att[out_channels, :] = self.fc_cls.weight.data[out_channels, :]
-                w_att.abs_()
-                w_att = w_att / w_att.sum(0, keepdim=True)
-                out_channels = [0]
-                for id in self.novel_ids:
-                    out_channels.append(id+1)
-                w_att[out_channels, :] = 1.
-                self.fc_cls.weight.data = self.fc_cls.weight.data * w_att
-            else:
-                w_att = torch.zeros_like(self.fc_cls.weight.data, device=x.device)
-                w_att[1:, :] = self.fc_cls.weight.data[1:, :]
-                w_att.abs_()
-                w_att = w_att / w_att.sum(0, keepdim=True)
-                w_att[0, :] = 1.
-                self.fc_cls.weight.data = self.fc_cls.weight.data * w_att
-
-        if self.cls_w_bg_fg_mutex:
-            cls_w_fg = self.fc_cls.weight[1:, :]
-            if self.base_ids is not None:
-                cls_w_fg = cls_w_fg[self.base_ids, :]
-            self.fc_cls.weight[0, :] = self.fc_cls.weight[0, :] - cls_w_fg.max(dim=0, keepdim=True)[0] * self.bg_fg_mutex_scale
-
-        # cls_score = self.fc_cls(cls_feat) if self.with_cls else None
-        cls_score, distance = self.cls_head(cls_feat)
+        fg_w_norm = F.normalize(self.fc_cls.weight, p=2, dim=1)
+        cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
+        fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
+        cls_feat_norm_ex = cls_feat_norm[:, None, :].expand_as(fg_w_norm_ex)
+        distance = torch.norm((cls_feat_norm_ex - fg_w_norm_ex), dim=2, p=2)
+        # cls_score = cos_sim * self.cos_scale
+        cls_score = torch.exp(-distance**2 / (2.0*self.sigma**2))
+        cls_score = inverse_sigmoid(cls_score)
+        # cls_score = self.fc_cls(cls_feat)
         bbox_pred = self.fc_reg(reg_feat) if self.with_reg else None
-
-        if self.add_cos:
-            cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
-            self.cos_cls.weight.data = F.normalize(self.cos_cls.weight.data, p=2, dim=1)
-            cls_score_cos = self.cos_cls(cls_feat_norm) * 15
-
         if self.base_ids is not None:
             out_channels = [0]
             for id in self.base_ids:
                 out_channels.append(id+1)
-            # if cls_score is not None:
-            #     cls_score = cls_score[:, out_channels]
-            if self.add_cos:
-                cls_score_cos = cls_score_cos[:, out_channels]
+            if cls_score is not None:
+                cls_score = cls_score[:, self.base_ids]
             if not self.reg_class_agnostic and bbox_pred is not None:
                 bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
-
+        if self.triplet_margin is not None:
+            if self.base_ids is not None:
+                distance = distance[:, self.base_ids]
+            extra_return = distance
+        # cls_score = torch.zeros_like(cls_score)
+        # cls_score[:, 1] = 5.
+        # bbox_pred = torch.zeros_like(bbox_pred)
         if self.training:
-            return cls_score, bbox_pred, distance
-
-        if self.add_cos:
-            return (cls_score, cls_score_cos), bbox_pred
+            return cls_score, bbox_pred, extra_return
         else:
             return cls_score, bbox_pred
 
@@ -272,21 +174,20 @@ class FSDMLBBoxHead(nn.Module):
             target_stds=self.target_stds)
         return cls_reg_targets
 
-    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'distance'))
+    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'extra'))
     def loss(self,
              cls_score,
              bbox_pred,
-             distance,
+             extra,
              labels,
              label_weights,
              bbox_targets,
              bbox_weights,
              reduction_override=None):
         losses = dict()
-        if self.add_cos:
-            cls_score, cls_score_cos = cls_score
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.)
+            num_pos = max(torch.sum(labels > 0).float().item(), 1.)
             if cls_score.numel() > 0:
                 # losses['loss_cls'] = self.loss_cls(
                 #     cls_score,
@@ -294,15 +195,30 @@ class FSDMLBBoxHead(nn.Module):
                 #     label_weights,
                 #     avg_factor=avg_factor,
                 #     reduction_override=reduction_override)
-                losses['loss_cls'] = self.loss_dml_cls(cls_score, labels, label_weights, avg_factor)
-                if self.add_cos:
-                    losses['loss_cls_cos'] = self.loss_cls(
-                        cls_score_cos,
-                        labels,
-                        label_weights,
-                        avg_factor=avg_factor,
-                        reduction_override=reduction_override)
-                losses['acc'] = accuracy(cls_score, labels)
+                # labels_oh = F.one_hot(labels, num_classes=self.num_classes)[:, 1:]
+                # loss_bce = F.binary_cross_entropy(cls_score, labels_oh.type_as(cls_score), reduction='none')
+                # losses['loss_cls'] = (loss_bce.mean(1) * label_weights).sum(0) / num_pos
+                losses['loss_cls'] = self.loss_cls(cls_score, labels, label_weights, avg_factor=num_pos)
+                cls_score_bg = torch.sub(1, cls_score.detach().max(1, keepdim=True)[0])
+                losses['acc'] = accuracy(torch.cat([cls_score_bg, cls_score], dim=1), labels)
+                if (labels > 0).sum() > 0:
+                    losses['fg_acc'] = accuracy(torch.cat([cls_score_bg, cls_score], dim=1)[labels > 0], labels[labels > 0])
+                else:
+                    losses['fg_acc'] = 100
+
+        if self.triplet_margin is not None:
+            distance = extra
+            pos_inds = labels > 0
+            labels_pos = labels[pos_inds]
+            labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()[:, 1:]
+            distance_pos = distance[pos_inds]
+            bs = distance_pos.size(0)
+            distance_pos_gt = distance_pos[labels_pos_one_hot]
+            distance_pos_other = distance_pos[torch.sub(1, labels_pos_one_hot)].reshape(bs, -1)
+            distance_pos_other_min = distance_pos_other.min(dim=-1)[0]
+            losses['loss_triplet'] = F.relu(
+                distance_pos_gt - distance_pos_other_min + self.triplet_margin).mean() * self.triplet_loss_weight
+
         if bbox_pred is not None:
             pos_inds = labels > 0
             if pos_inds.any():
@@ -320,42 +236,7 @@ class FSDMLBBoxHead(nn.Module):
                     bbox_weights[pos_inds.type(torch.bool)],
                     avg_factor=bbox_targets.size(0),
                     reduction_override=reduction_override)
-
-        losses['loss_emb'] = self.loss_emb(distance, labels, label_weights)
-
-        if self.cls_w_l1_regular:
-            if self.base_ids is not None:
-                output_channels = [i + 1 for i in self.base_ids]
-                losses['loss_cls_w_l1'] = self.fc_cls.weight[output_channels, :].abs().sum() * self.cls_w_l1_regular_loss_weight
-            else:
-                losses['loss_cls_w_l1'] = self.fc_cls.weight.abs().sum() * self.cls_w_l1_regular_loss_weight
-        if self.use_channel_attention:
-            ca_target = torch.zeros_like(self.cls_channel_attention.channel_attention, device=cls_score.device)
-            losses['loss_CA_cls'] = F.smooth_l1_loss(self.cls_channel_attention.channel_attention, ca_target) * self.channel_attention_loss_weight
-            losses['loss_CA_reg'] = F.smooth_l1_loss(self.reg_channel_attention.channel_attention, ca_target) * self.channel_attention_loss_weight
         return losses
-
-    def loss_emb(self, distance, labels, label_weights):
-        pos_inds = labels > 0
-        distance_pos = distance[pos_inds]
-
-        n = distance_pos.size(0)
-        n_cls = distance_pos.size(1)
-
-        labels_pos = labels[pos_inds]
-        label_weights_pos = label_weights[pos_inds]
-        labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()[:, 1:]
-        labels_pos_one_hot_inverse = torch.sub(1, labels_pos_one_hot)
-        distance_pos_target = distance_pos[labels_pos_one_hot].reshape(n, -1)
-        distance_pos_other = distance_pos[labels_pos_one_hot_inverse].reshape(n, -1)
-        loss_emb_all = F.relu(distance_pos_target.squeeze(-1) - distance_pos_other.min(-1)[0] + self.dml_alpha)
-        loss_emb = (loss_emb_all*label_weights_pos).mean()
-        return loss_emb
-
-    def loss_dml_cls(self, cls_score, labels, label_weights, avg_factor):
-        loss_cls_all = F.nll_loss(cls_score.log(), labels, None, None, -100, None, 'none') * label_weights
-        loss_dml_cls = loss_cls_all.sum() / avg_factor
-        return loss_dml_cls
 
     @force_fp32(apply_to=('cls_score', 'bbox_pred'))
     def get_det_bboxes(self,
@@ -366,19 +247,12 @@ class FSDMLBBoxHead(nn.Module):
                        scale_factor,
                        rescale=False,
                        cfg=None):
-        if self.add_cos:
-            cls_score, cls_score_cos = cls_score
-            if isinstance(cls_score_cos, list):
-                cls_score_cos = sum(cls_score_cos) / float(len(cls_score_cos))
-            cls_score_cos = F.softmax(cls_score_cos, dim=1) if cls_score_cos is not None else None
-
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
+        cls_score = cls_score.sigmoid()
+        pad = torch.zeros(cls_score.size(0), 1).to(cls_score.device)
+        scores = torch.cat([pad, cls_score], dim=1)
         # scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
-        scores = cls_score if cls_score is not None else None
-
-        if self.add_cos:
-            scores = scores * 0.5 + cls_score_cos * 0.5
 
         if bbox_pred is not None:
             bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,

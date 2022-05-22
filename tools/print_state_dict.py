@@ -15,10 +15,14 @@ import torch
 # checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/base/epoch_12.pth'
 # checkpoint_path = '/home/luyue/.cache/torch/checkpoints/resnet101-5d3b4d8f_wo_res5.pth'
 # checkpoint_path = 'work_dirs/ga_retina_dml4_voc_split1/wo_norm/pre_base/base/epoch_16.pth'
-checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/aug2/base/epoch_12.pth'
+# checkpoint_path = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/aug2/base/epoch_12.pth'
+# checkpoint_path = 'work_dirs/frcn_r101_voc/torchvision/1000_600/split2/D/1shot/epoch_16.pth'
+# checkpoint_path = 'work_dirs/frcn_r101_voc/torchvision/fs_cos_bbox_head/default/split2/base/epoch_12.pth'
+checkpoint_path = 'work_dirs/frcn_r101_voc/torchvision/fs_cos_bbox_head/default/split2/D/5shot/epoch_16.pth'
 checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
 
-for key in checkpoint['state_dict'].keys():
-    print(key)
+# for key in checkpoint['state_dict'].keys():
+#     print(key)
+print(checkpoint['state_dict']['bbox_head.bg_cos_scale'])
 # for key in checkpoint.keys():
 #     print(key)

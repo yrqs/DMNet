@@ -130,7 +130,7 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.05, nms=dict(type='nms', iou_thr=0.999), max_per_img=100))
+        score_thr=0.1, nms=dict(type='nms', iou_thr=0.3), max_per_img=100))
 # dataset settings
 # dataset_type = 'VOCDatasetNovel2'
 dataset_type = 'VOCDataset'
@@ -155,6 +155,7 @@ test_pipeline = [
     dict(
         type='MultiScaleFlipAug',
         img_scale=(1000, 600),
+        # img_scale=(1000, 440),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -187,7 +188,13 @@ data = dict(
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
+        # ann_file=[
+        #     data_root + 'VOC2007/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt',
+        #     data_root + 'VOC2012/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt'
+        # ],
+        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        # ann_file=data_root + 'VOC2007/ImageSets/Main/novel_split2_test.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
 
