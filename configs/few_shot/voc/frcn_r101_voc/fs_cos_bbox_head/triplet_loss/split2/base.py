@@ -220,6 +220,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
 load_from = None
+# load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/triplet_loss/split2/base/epoch_12.pth'
 resume_from = None
 resume_optimizer = False
 workflow = [('train', 1)]

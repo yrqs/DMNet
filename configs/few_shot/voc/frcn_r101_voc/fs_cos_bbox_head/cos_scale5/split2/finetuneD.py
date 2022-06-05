@@ -131,7 +131,7 @@ test_cfg = dict(
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
-        score_thr=0.11, nms=dict(type='nms', iou_thr=0.3), max_per_img=100))
+        score_thr=0.05, nms=dict(type='nms', iou_thr=0.5), max_per_img=100))
 # dataset settings
 # dataset_type = 'VOCDatasetNovel2'
 dataset_type = 'VOCDataset'
@@ -224,6 +224,6 @@ total_epochs = lr_step[1]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
-load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/cos_scale5/split2/base/epoch_12.pth'
+load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/cos_scale5/split2/base/epoch_14.pth'
 resume_from = None
 workflow = [('train', 1)]

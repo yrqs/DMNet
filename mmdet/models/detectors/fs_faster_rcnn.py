@@ -3,6 +3,7 @@ from .two_stage import TwoStageDetector
 import torch
 from mmdet.core import bbox2roi, build_assigner, build_sampler, bbox2result
 from .. import builder
+import torch.nn as nn
 
 @DETECTORS.register_module
 class FSFasterRCNN(TwoStageDetector):
@@ -56,6 +57,9 @@ class FSFasterRCNN(TwoStageDetector):
 
         if global_shared_head is not None:
             self.global_shared_head = builder.build_shared_head(global_shared_head)
+
+        if global_attention:
+            self.global_avg_pool = nn.AdaptiveAvgPool2d((14, 14))
 
     def forward_train(self,
                       img,
@@ -147,9 +151,11 @@ class FSFasterRCNN(TwoStageDetector):
                 x_global = self.global_shared_head(x[0])
                 img_cls_labels = [torch.unique(l) for l in gt_labels]
             if self.global_attention:
-                x_global = self.shared_head(x[0])
+                x_avg_pool = self.global_avg_pool(x[0])
+                x_global = self.shared_head(x_avg_pool)
             if self.global_info:
-                x_global = self.shared_head(x[0])
+                x_avg_pool = self.global_avg_pool(x[0])
+                x_global = self.shared_head(x_avg_pool)
             if self.multi_rois:
                 assert self.with_shared_head and (self.roi_offsets is not None)
                 assert isinstance(self.roi_offsets, (tuple, list))
@@ -242,7 +248,9 @@ class FSFasterRCNN(TwoStageDetector):
             roi_feats = self.shared_head(roi_feats)
 
         if self.global_attention:
-            x_global = self.shared_head(x[0])
+            x_avg_pool = self.global_avg_pool(x[0])
+            x_global = self.shared_head(x_avg_pool)
+            # x_global = self.shared_head(x[0])
 
         if self.global_info:
             x_global = self.shared_head(x[0])

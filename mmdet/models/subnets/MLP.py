@@ -17,7 +17,8 @@ class MLP(nn.Module):
                     self.layers.append(nn.Linear(in_channels, hc))
                 else:
                     self.layers.append(nn.Linear(hidden_channels[i-1], hc))
-                self.layers.append(action_function)
+                if action_function is not None:
+                    self.layers.append(action_function)
             self.layers.append(nn.Linear(hidden_channels[-1], out_channels))
         for m in self.layers:
             if isinstance(m, nn.Linear):

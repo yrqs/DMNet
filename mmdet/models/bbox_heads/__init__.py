@@ -14,9 +14,10 @@ from .fs_dml_bbox_head import FSDMLBBoxHead
 from .fs_cos_neg_bbox_head import FSCosNegBBoxHead
 from .fs_cos_bbox_head import FSCosBBoxHead
 from .fs_cac_bbox_head import FSCACBBoxHead
+from .fs_cos_neg_bbox_head1 import FSCosNegBBoxHead1
 
 __all__ = [
     'BBoxHead', 'ConvFCBBoxHead', 'SharedFCBBoxHead', 'DoubleConvFCBBoxHead', 'DMLBBoxHead',
     'DMLFCBBoxHead', 'BBoxHeadHN', 'FSBBoxHead', 'FSDMLBBoxHead', 'FSCosNegBBoxHead',
-    'FSCosBBoxHead', 'FSBBoxHead2', 'FSBBoxHead3', 'FSCACBBoxHead'
+    'FSCosBBoxHead', 'FSBBoxHead2', 'FSBBoxHead3', 'FSCACBBoxHead', 'FSCosNegBBoxHead1'
 ]

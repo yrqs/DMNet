@@ -11,6 +11,9 @@ from ..registry import HEADS
 from mmdet.ops.scale_grad import scale_tensor_gard
 from mmdet.core.bbox.geometry import bbox_overlaps
 
+from mmdet.models.subnets import MLP
+from mmdet.utils.show_feature import show_feature
+
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
@@ -43,6 +46,14 @@ class FSCosBBoxHead(nn.Module):
                  hn_thresh=(0.1, 0.5),
                  neg_beta=0.3,
                  img_classification=False,
+                 global_attention=False,
+                 cls_attention=False,
+                 reg_attention=False,
+                 translation_invariance=False,
+                 add_fc=False,
+                 rep_key_channel=False,
+                 num_key_channels=128,
+                 use_tanh=False,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -66,7 +77,7 @@ class FSCosBBoxHead(nn.Module):
         # self.loss_cls = build_loss(loss_cls)
         self.loss_cls = build_loss(dict(
             type='FocalLoss',
-            use_sigmoid=True,
+            use_sigmoid=not use_tanh,
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0))
@@ -77,13 +88,23 @@ class FSCosBBoxHead(nn.Module):
             self.avg_pool = nn.AvgPool2d(self.roi_feat_size)
         else:
             in_channels *= self.roi_feat_area
+
         if self.with_cls:
             fc_cls_channels = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes - 1
-            self.fc_cls = nn.Linear(in_channels, fc_cls_channels, bias=False)
+            if add_fc:
+                self.fc_cls = nn.Linear(in_channels // 4, fc_cls_channels, bias=False)
+            else:
+                self.fc_cls = nn.Linear(in_channels, fc_cls_channels, bias=False)
+
         if self.with_reg:
             fc_cls_channels = (len(base_ids)+len(novel_ids)+1) if base_ids is not None else num_classes
             out_dim_reg = 4 if reg_class_agnostic else 4 * fc_cls_channels
-            self.fc_reg = nn.Linear(in_channels, out_dim_reg)
+
+            if add_fc:
+                self.fc_reg = nn.Linear(in_channels // 4, out_dim_reg)
+            else:
+                self.fc_reg = nn.Linear(in_channels, out_dim_reg)
+
         self.debug_imgs = None
 
         self.base_ids = base_ids
@@ -111,6 +132,37 @@ class FSCosBBoxHead(nn.Module):
             fc_cls_channels = (len(base_ids)+len(novel_ids)) if base_ids is not None else num_classes - 1
             self.fc_cls_img = nn.Linear(in_channels, fc_cls_channels, bias=True)
 
+        self.global_attention = global_attention
+        if global_attention:
+            self.global_attention_fc = nn.Linear(in_channels*2, in_channels)
+            # self.global_attention_fc = MLP(in_channels*2, in_channels, (in_channels // 4,), action_function=nn.ReLU())
+            self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+            self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
+
+            # for p in self.global_attention_fc.parameters():
+            #     p.requires_grad = False
+
+        self.cls_attention = cls_attention
+        self.reg_attention = reg_attention
+        if cls_attention:
+            # self.cls_att_mlp = MLP(in_channels, in_channels, (in_channels // 4, ), action_function=nn.ReLU())
+            self.cls_att_vector = nn.Parameter(torch.rand(1, in_channels))
+        if reg_attention:
+            self.reg_att_mlp = MLP(in_channels, in_channels, (in_channels // 4, ), action_function=nn.ReLU())
+
+        self.add_fc = add_fc
+        if add_fc:
+            self.add_cls_fc = nn.Linear(in_channels, in_channels // 4)
+            self.add_reg_fc = nn.Linear(in_channels, in_channels // 4)
+
+        self.translation_invariance = translation_invariance
+
+        self.rep_key_channel = rep_key_channel
+        self.num_key_channels = num_key_channels
+
+        self.use_tanh = use_tanh
+
+
     def init_weights(self):
         if self.neg_cls:
             nn.init.normal_(self.fc_neg_cls.weight, 0, 0.01)
@@ -125,9 +177,19 @@ class FSCosBBoxHead(nn.Module):
             nn.init.normal_(self.fc_cls_img.weight, 0, 0.01)
             nn.init.constant_(self.fc_cls_img.bias, 0)
 
+        if self.global_attention:
+            nn.init.normal_(self.global_attention_fc.weight, 0, 0.01)
+            nn.init.constant_(self.global_attention_fc.bias, 0)
+
         if self.with_reg:
             nn.init.normal_(self.fc_reg.weight, 0, 0.001)
             nn.init.constant_(self.fc_reg.bias, 0)
+
+        if self.add_fc:
+            nn.init.normal_(self.add_cls_fc.weight, 0, 0.01)
+            nn.init.constant_(self.add_cls_fc.bias, 0)
+            nn.init.normal_(self.add_reg_fc.weight, 0, 0.01)
+            nn.init.constant_(self.add_reg_fc.bias, 0)
 
     @auto_fp16()
     def forward(self, x, extra=None):
@@ -150,12 +212,57 @@ class FSCosBBoxHead(nn.Module):
         cls_feat = x
         reg_feat = x
 
-        fg_w_norm = F.normalize(self.fc_cls.weight, p=2, dim=1)
-        cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
-        fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
-        cls_feat_norm_ex = cls_feat_norm[:, None, :].expand_as(fg_w_norm_ex)
-        cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
+        if self.add_fc:
+            cls_feat = self.add_cls_fc(cls_feat)
+            reg_feat = self.add_reg_fc(reg_feat)
+            # if self.training and (self.grad_scale is not None):
+            #     cls_feat = scale_tensor_gard(cls_feat, self.grad_scale)
+            #     reg_feat = scale_tensor_gard(reg_feat, self.grad_scale)
+
+        if self.cls_attention:
+            # cls_att = self.cls_att_mlp(cls_feat.detach()).sigmoid()
+            cls_att = self.cls_att_vector
+            cls_feat  = cls_feat * cls_att
+
+        if self.reg_attention:
+            reg_att = self.reg_att_mlp(reg_feat).sigmoid()
+            reg_feat  = reg_feat * reg_att
+
+        if self.global_attention:
+            x_global = extra
+            # show_feature(torch.norm(x_global, p=2, dim=1, keepdim=True), use_sigmoid=False)
+            if self.training and (self.grad_scale is not None):
+                x_global = scale_tensor_gard(x_global, self.grad_scale)
+            x_global_avg = self.global_avg_pool(x_global).flatten(1)
+            x_global_max = self.global_max_pool(x_global).flatten(1)
+            global_att = self.global_attention_fc(torch.cat([x_global_avg, x_global_max], dim=1)).sigmoid()
+
+            # if self.training and (self.grad_scale is not None):
+            #     global_att = scale_tensor_gard(global_att, self.grad_scale)
+
+            cls_feat = cls_feat * global_att.expand_as(cls_feat)
+
+        if self.rep_key_channel:
+            top_k = self.fc_cls.weight.sort(dim=1, descending=True)[0][:, self.num_key_channels][:, None]
+            key_channels_mask = (self.fc_cls.weight > top_k).float()
+            key_channels_mask[key_channels_mask==0] = 0.1
+            fg_w_mask = self.fc_cls.weight * key_channels_mask
+            fg_w_norm = F.normalize(fg_w_mask, p=2, dim=1)
+            fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
+            cls_feat_ex = cls_feat[:, None, :].expand_as(fg_w_norm_ex)
+            cls_feat_ex = cls_feat_ex * key_channels_mask[None, :, :].expand_as(cls_feat_ex)
+            cls_feat_norm_ex = F.normalize(cls_feat_ex, p=2, dim=2)
+            cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
+        else:
+            fg_w_norm = F.normalize(self.fc_cls.weight, p=2, dim=1)
+            cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
+            fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
+            cls_feat_norm_ex = cls_feat_norm[:, None, :].expand_as(fg_w_norm_ex)
+            cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
         # cls_score = cos_sim * self.cos_scale
+
+        if self.translation_invariance:
+            extra_return = cls_feat_norm
 
         if self.img_classification:
             img_x, img_labels = extra
@@ -172,10 +279,14 @@ class FSCosBBoxHead(nn.Module):
             neg_fg_w_norm_ex = neg_fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
             cos_sim_neg = (neg_fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
             cls_score = torch.exp(-(torch.sub(1, cos_sim - self.neg_beta * cos_sim_neg))**2 * self.cos_scale)
+        elif self.use_tanh:
+            cls_score = torch.exp(-(torch.sub(1, cos_sim))**2 * self.cos_scale)
+            cls_score = (cls_score * self.cos_scale).tanh()
         else:
             cls_score = torch.exp(-(torch.sub(1, cos_sim))**2 * self.cos_scale)
 
-        cls_score = inverse_sigmoid(cls_score)
+        if not self.use_tanh:
+            cls_score = inverse_sigmoid(cls_score)
         # cls_score = self.fc_cls(cls_feat)
         bbox_pred = self.fc_reg(reg_feat) if self.with_reg else None
         if self.base_ids is not None:
@@ -187,8 +298,8 @@ class FSCosBBoxHead(nn.Module):
             if not self.reg_class_agnostic and bbox_pred is not None:
                 bbox_pred = bbox_pred.reshape(bbox_pred.size(0), -1, 4)[:, out_channels, :].reshape(bbox_pred.size(0), -1)
 
-        if self.img_classification and not self.training:
-            cls_score = cls_score_img.sigmoid() * cls_score
+        # if self.img_classification and not self.training:
+        #     cls_score = cls_score_img.sigmoid() * cls_score
 
         if self.triplet_margin is not None:
             if self.base_ids is not None:
@@ -238,6 +349,18 @@ class FSCosBBoxHead(nn.Module):
                 neg_labels = labels[i][num_pos:]
                 neg_labels[hn_inds] = -gt_labels[i][argmax_overlaps[hn_inds]]
                 labels[i] = torch.cat([labels[i][:num_pos], neg_labels], dim=0)
+
+        if self.translation_invariance:
+            num_img = len(sampling_results)
+            for i in range(num_img):
+                num_pos = pos_proposals[i].size(0)
+                # print(labels[i][:num_pos])
+                overlaps = bbox_overlaps(gt_bboxes[i], pos_proposals[i])
+                max_overlaps, argmax_overlaps = overlaps.max(dim=0)
+                img_ind_gt_ind = i * 10000 + argmax_overlaps * 100
+                labels[i][:num_pos] = labels[i][:num_pos] + img_ind_gt_ind
+                # print(labels[i][:num_pos])
+
         labels = torch.cat(labels, 0)
         label_weights = torch.cat(label_weights, 0)
         bbox_targets = torch.cat(bbox_targets, 0)
@@ -255,6 +378,24 @@ class FSCosBBoxHead(nn.Module):
              bbox_weights,
              reduction_override=None):
         losses = dict()
+        if self.translation_invariance:
+            cls_feat_norm = extra
+            pos_inds = labels > 0
+            cls_feat_norm_pos = cls_feat_norm[pos_inds]
+            pos_labels = labels[pos_inds].clone()
+            labels[pos_inds] = pos_labels % 100
+            pos_labels_unique = pos_labels.unique()
+            loss_ti = torch.zeros(1).to(cls_score.device)
+            for plu in pos_labels_unique:
+                inds = pos_labels == plu
+                if inds.sum() == 1:
+                    continue
+                # print(inds)
+                # print(cls_feat_norm_pos[inds].var(dim=0))
+                m = cls_feat_norm_pos[inds].mean(dim=0)
+                loss_ti = torch.norm((cls_feat_norm_pos[inds] - m), p=2, dim=1).sum() + loss_ti
+            losses['loss_ti'] = loss_ti / max(1, int(pos_inds.sum()))
+
         if self.neg_cls:
             cos_sim_neg = extra
             neg_labels = labels.clone()
@@ -298,7 +439,11 @@ class FSCosBBoxHead(nn.Module):
                 # labels_oh = F.one_hot(labels, num_classes=self.num_classes)[:, 1:]
                 # loss_bce = F.binary_cross_entropy(cls_score, labels_oh.type_as(cls_score), reduction='none')
                 # losses['loss_cls'] = (loss_bce.mean(1) * label_weights).sum(0) / num_pos
-                losses['loss_cls'] = self.loss_cls(cls_score, labels, label_weights, avg_factor=num_pos)
+                if self.use_tanh:
+                    labels_oh = F.one_hot(labels, num_classes=self.num_classes)[:, 1:]
+                    losses['loss_cls'] = self.loss_cls(cls_score, labels_oh, label_weights, avg_factor=num_pos)
+                else:
+                    losses['loss_cls'] = self.loss_cls(cls_score, labels, label_weights, avg_factor=num_pos)
                 cls_score_bg = torch.sub(1, cls_score.detach().max(1, keepdim=True)[0])
                 losses['acc'] = accuracy(torch.cat([cls_score_bg, cls_score], dim=1), labels)
                 if (labels > 0).sum() > 0:
@@ -315,9 +460,18 @@ class FSCosBBoxHead(nn.Module):
             bs = cos_sim_pos.size(0)
             cos_sim_pos_gt = cos_sim_pos[labels_pos_one_hot]
             cos_sim_pos_other = cos_sim_pos[torch.sub(1, labels_pos_one_hot)].reshape(bs, -1)
-            cos_sim_pos_other_min = cos_sim_pos_other.max(dim=-1)[0]
+            cos_sim_pos_other_max = cos_sim_pos_other.max(dim=-1)[0]
+            # print('=====================================')
+            # print(pos_inds)
+            # print(labels_pos)
+            # print(labels_pos_one_hot)
+            # print(cos_sim_pos)
+            # print(cos_sim_pos_gt)
+            # print(cos_sim_pos_other)
+            # print(cos_sim_pos_other_max)
+            # print('######################################')
             losses['loss_triplet'] = F.relu(
-                cos_sim_pos_other_min - cos_sim_pos_gt + self.triplet_margin).mean() * self.triplet_loss_weight
+                cos_sim_pos_other_max - cos_sim_pos_gt + self.triplet_margin).mean() * self.triplet_loss_weight
 
         if bbox_pred is not None:
             pos_inds = labels > 0
@@ -349,7 +503,8 @@ class FSCosBBoxHead(nn.Module):
                        cfg=None):
         if isinstance(cls_score, list):
             cls_score = sum(cls_score) / float(len(cls_score))
-        cls_score = cls_score.sigmoid()
+        if not self.use_tanh:
+            cls_score = cls_score.sigmoid()
         pad = torch.zeros(cls_score.size(0), 1).to(cls_score.device)
         scores = torch.cat([pad, cls_score], dim=1)
         # scores = F.softmax(cls_score, dim=1) if cls_score is not None else None

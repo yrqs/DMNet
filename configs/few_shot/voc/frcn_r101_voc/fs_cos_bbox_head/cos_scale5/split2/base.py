@@ -1,6 +1,6 @@
 warmup_iters = 500
-lr_step = [8, 11, 12]
-interval = 12
+lr_step = [10, 13, 14]
+interval = 14
 lr_base = 0.00125
 imgs_per_gpu = 2
 gpu_num = 8

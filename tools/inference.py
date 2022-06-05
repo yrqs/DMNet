@@ -157,10 +157,11 @@ def multi_class(detector):
     img_scale = (256, 256)
     res = []
     detector.cfg.data.test.pipeline[1]['img_scale'] = img_scale
-    img_name = '0.jpg'
+    img_name = '3.jpg'
     for class_name in class_names:
         img = os.path.join(instance_root, class_name, img_name)
-        res.append(frcn_roi_cls(detector, img))
+        res.append(frcn_bbox_roi_cls(detector, img))
+        # res.append(frcn_roi_cls(detector, img))
     return res
 
 def multi_class_avg(detector):
@@ -277,21 +278,25 @@ if __name__ == '__main__':
     # checkpoint = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/triplet_loss/DF/10shot/epoch_16.pth'
     # config = 'configs/few_shot/voc/frcn_r101_voc/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/triplet_loss/margin_01/finetuneDFCrop.py'
     # checkpoint = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/triplet_loss/margin_01/DFCrop/10shot/epoch_16.pth'
-    config = 'configs/few_shot/voc/frcn_r101_voc/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/split2/finetuneD.py'
-    checkpoint = 'work_dirs/frcn_r101_voc/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/split2/D/10shot/epoch_16.pth'
+    # config = 'configs/few_shot/voc/frcn_r101_voc/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/split2/finetuneD.py'
+    # checkpoint = 'work_dirs/frcn_r101_voc/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/split2/D/10shot/epoch_16.pth'
     # checkpoint = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/triplet_loss/margin_01/base/epoch_12.pth'
     # checkpoint = 'work_dirs/frcn_r101_voc_split1/torchvision/fs_bbox_head/wo_detach/1000_600/use_cos/DF/10shot/epoch_16.pth'
+    # config = 'configs/few_shot/voc/frcn_r101_voc/fs_cos_bbox_head/default/split2/finetuneD.py'
+    # checkpoint = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/default/split2/D/10shot/epoch_14.pth'
+    config = 'configs/few_shot/voc/frcn_r101_voc/fs_cos_bbox_head/triplet_loss/margin01/split2/finetuneD.py'
+    checkpoint = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/triplet_loss/margin01/split2/D/10shot/epoch_14.pth'
     detector = init_detector(config, checkpoint)
 
     # res = multi_scale(detector)
     # res, att = multi_img(detector)
-    # res = multi_class(detector)
-    # res = torch.cat(res, dim=0).detach()
+    res = multi_class(detector)
+    res = torch.cat(res, dim=0).detach()
     # att = torch.cat(att, dim=0).detach()
     # plot_att(att)
 
-    with torch.no_grad():
-        res = multi_rois(detector)
+    # with torch.no_grad():
+    #     res = multi_rois(detector)
 
     fc_reg_w = detector.bbox_head.fc_reg.weight.detach()
     cls_att = torch.sub(1., fc_reg_w / fc_reg_w.max(dim=1, keepdim=True)[0])
@@ -327,20 +332,23 @@ if __name__ == '__main__':
     #     # class_names=['cow'] + ['mean', 'var'] + list(CLASSES) + ['x', 'y', 'w', 'h'])
 
     with torch.no_grad():
-        fg_w_norm = F.normalize(detector.bbox_head.fc_cls.weight[1:, :], p=2, dim=1)
+        # fg_w_norm = F.normalize(detector.bbox_head.fc_cls.weight[1:, :], p=2, dim=1)
+        fg_w_norm = F.normalize(detector.bbox_head.fc_cls.weight, p=2, dim=1)
         cls_feat_norm = F.normalize(res, p=2, dim=1)
         fg_w_norm_ex = fg_w_norm[None, :, :].expand(res.size(0), -1, -1)
         cls_feat_norm_ex = cls_feat_norm[:, None, :].expand_as(fg_w_norm_ex)
-        fg_cls_score = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1) * detector.bbox_head.cos_scale
-        bg_cls_score = (detector.bbox_head.fc_cls.weight[0, :][None, :].expand_as(res) * res).sum(-1, keepdim=True)
-        cls_score = torch.cat([bg_cls_score, fg_cls_score], dim=1).softmax(-1)[:, 1:]
+        cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
+        # fg_cls_score = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1) * detector.bbox_head.cos_scale
+        # bg_cls_score = (detector.bbox_head.fc_cls.weight[0, :][None, :].expand_as(res) * res).sum(-1, keepdim=True)
+        # cls_score = torch.cat([bg_cls_score, fg_cls_score], dim=1).softmax(-1)[:, 1:]
         # cls_score = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
 
     # cls_score = detector.bbox_head.fc_cls(res).softmax(-1)
 
     norm = matplotlib.colors.Normalize(vmin=0, vmax=1)
     plt.figure()
-    plt.imshow(cls_score.cpu(), cmap='rainbow', norm=norm)
+    # plt.imshow(cls_score.cpu(), cmap='rainbow', norm=norm)
+    plt.imshow(cos_sim.cpu(), cmap='rainbow', norm=norm)
     # class_names = ('bg', ) + CLASSES
     class_names = CLASSES
     num_cls = len(class_names)
