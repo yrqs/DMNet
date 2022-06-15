@@ -4,7 +4,7 @@ train_repeat_times = [30, 25, 20, 15, 10]
 
 warmup_iters = 10
 lr_step = [10, 14, 16]
-interval = 14
+interval = 2
 lr_base = 0.00075
 imgs_per_gpu = 2
 gpu_num = 8
@@ -69,9 +69,11 @@ model = dict(
         out_channels=1024,
         featmap_strides=[16]),
     bbox_head=dict(
-        type='FSCosBBoxHead',
-        triplet_margin=0.05,
-        triplet_loss_weight=1.0,
+        type='FSCosNegBBoxHead1',
+        neg_beta=0.3,
+        hn_thresh=0.15,
+        neg_margin=0.1,
+        neg_mode=3,
         cos_scale=3,
         grad_scale=0.001,
         with_avg_pool=True,
@@ -191,13 +193,13 @@ data = dict(
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        ann_file=[
-            data_root + 'VOC2007/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt',
-            data_root + 'VOC2012/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt'
-        ],
-        img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-        # img_prefix=data_root + 'VOC2007/',
+        # ann_file=[
+        #     data_root + 'VOC2007/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt',
+        #     data_root + 'VOC2012/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt'
+        # ],
+        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
 
 evaluation = dict(interval=interval, metric='mAP')
@@ -226,6 +228,6 @@ total_epochs = lr_step[1]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
-load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/triplet_loss/margin005/split2/base/epoch_16.pth'
+load_from = 'work_dirs/frcn_r101_voc/fs_cos_neg_bbox_head1/hn_thresh_015/split2/base/epoch_16.pth'
 resume_from = None
 workflow = [('train', 1)]

@@ -4,7 +4,7 @@ ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 
 DATASET='voc'
 MODEL_NAME=frcn_r101_voc
-PARAMETER=fs_cos_bbox_head/base_grad_scale_1/split2
+PARAMETER=fs_cos_bbox_head/dropout/split2
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'
@@ -29,10 +29,9 @@ CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_nod
     $(dirname "$0")/finetune.py $CONFIG --launcher pytorch ${@:3} \
     --validate \
     --shot $i \
-    --work_dir $WORK_DIR_BASE'Dnms011/'$i'shot' \
+    --work_dir $WORK_DIR_BASE'D/'$i'shot' \
     && sleep 20s
 done;
-
 #
 #ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 #

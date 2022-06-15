@@ -1,6 +1,6 @@
 warmup_iters = 500
-lr_step = [8, 11, 12]
-interval = 12
+lr_step = [10, 13, 14]
+interval = 14
 lr_base = 0.00125
 imgs_per_gpu = 2
 gpu_num = 8
@@ -100,7 +100,7 @@ train_cfg = dict(
         pos_weight=-1,
         debug=False),
     rpn_proposal=dict(
-        nms_across_levels=True,
+        nms_across_levels=False,
         nms_pre=12000,
         nms_post=2000,
         max_num=2000,
@@ -172,6 +172,7 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
+            enable_ignore=False,
             ann_file=[
                 # data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
                 # data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
@@ -182,6 +183,7 @@ data = dict(
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
+        enable_ignore=True,
         ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),

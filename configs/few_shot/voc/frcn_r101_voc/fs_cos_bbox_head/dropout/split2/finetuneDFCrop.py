@@ -29,7 +29,7 @@ model = dict(
     type='FasterRCNN',
     freeze_backbone=False,
     freeze_rpn=False,
-    freeze_shared_head=False,
+    freeze_shared_head=True,
     backbone=dict(
         type='ResNet',
         depth=101,
@@ -70,8 +70,6 @@ model = dict(
         featmap_strides=[16]),
     bbox_head=dict(
         type='FSCosBBoxHead',
-        triplet_margin=0.05,
-        triplet_loss_weight=1.0,
         cos_scale=3,
         grad_scale=0.001,
         with_avg_pool=True,
@@ -143,6 +141,7 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='MinIoURandomCrop'),
     dict(type='Resize', img_scale=[
         (1000, 302), (1000, 334), (1000, 376), (1000, 408),
         (1000, 440), (1000, 472), (1000, 504), (1000, 536),
@@ -226,6 +225,6 @@ total_epochs = lr_step[1]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
-load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/triplet_loss/margin005/split2/base/epoch_16.pth'
+load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/default/split2/base/epoch_12.pth'
 resume_from = None
 workflow = [('train', 1)]

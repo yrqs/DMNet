@@ -2,6 +2,8 @@ import numpy as np
 import torch
 
 from . import nms_cpu, nms_cuda
+import torch._ops
+import torchvision
 
 
 def nms(dets, iou_thr, device_id=None):
@@ -52,6 +54,7 @@ def nms(dets, iou_thr, device_id=None):
     else:
         if dets_th.is_cuda:
             inds = nms_cuda.nms(dets_th, iou_thr)
+            # inds = torchvision.ops.nms(dets_th[:, :4], dets_th[:, -1], iou_thr)
         else:
             inds = nms_cpu.nms(dets_th, iou_thr)
 

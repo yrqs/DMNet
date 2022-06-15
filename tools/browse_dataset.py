@@ -16,6 +16,9 @@ matplotlib.use('TkAgg')  # or whatever other backend that you want
 import matplotlib.colors
 import matplotlib.pyplot as plt
 
+from fvcore.common.file_io import PathManager
+import xml.etree.ElementTree as ET
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Browse a dataset')
     parser.add_argument('config', help='train config file path')
@@ -129,6 +132,25 @@ def main1():
         # progress_bar.update()
         # print(item['gt_labels'] - 1)
         # print(item['filename'])
+
+def get_gt_num_per_class():
+    cfg = retrieve_data_cfg('configs/few_shot/voc/voc_test.py', ['DefaultFormatBundle', 'Normalize', 'Collect'])
+    dataset = build_dataset(cfg.data.train)
+
+    num_gt_per_class = dict()
+    for c in CLASSES:
+        num_gt_per_class[c] = 0
+
+    for i in tqdm.tqdm(range(len(dataset))):
+        item = dataset[i]
+        gt_bbox = item['gt_bboxes']
+        gt_labels = (item['gt_labels'] - 1)
+        for gl, gb in zip(gt_labels, gt_bbox):
+            cls_name = CLASSES[gl]
+            num_gt_per_class[cls_name] += 1
+
+    for key in num_gt_per_class.keys():
+        print(key, ': ', num_gt_per_class[key])
 
 CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
            'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
@@ -287,21 +309,57 @@ def load_dict(f_name):
     dict2 = pickle.load(f_read)
     return dict2
 
+def gt_num_from_xml():
+    with PathManager.open(
+            os.path.join('data/VOCdevkit/VOC2007', "ImageSets", "Main", 'test' + ".txt")
+    ) as f:
+        fileids = np.loadtxt(f, dtype=np.str)
+
+    num_gt_per_class = dict()
+    for c in CLASSES:
+        num_gt_per_class[c] = 0
+
+    for fileid in fileids:
+        anno_file = os.path.join('data/VOCdevkit/VOC2007', "Annotations", fileid + ".xml")
+        jpeg_file = os.path.join('data/VOCdevkit/VOC2007', "JPEGImages", fileid + ".jpg")
+
+        tree = ET.parse(anno_file)
+
+        r = {
+            "file_name": jpeg_file,
+            "image_id": fileid,
+            "height": int(tree.findall("./size/height")[0].text),
+            "width": int(tree.findall("./size/width")[0].text),
+        }
+        instances = []
+
+        for obj in tree.findall("object"):
+            cls = obj.find("name").text
+            if not (cls in CLASSES):
+                continue
+            num_gt_per_class[cls] += 1
+
+    for key in num_gt_per_class.keys():
+        print(key, ': ', num_gt_per_class[key])
+
 if __name__ == '__main__':
     # main1()
     # crop_gt()
     # select_novel(1)
-    f_name = 'mytest/gt_bbox_areas_voc_test07_1333_800.pkl'
-    if os.path.exists(f_name):
-        gt_bbox_areas = load_dict(f_name)
-    else:
-        gt_bbox_areas = summary_gt_bbox()
-        save_dict(gt_bbox_areas, f_name)
-    l = []
-    for c in novel_sets[1]:
-        l.append(gt_bbox_areas[c])
-    datas = np.stack(l, axis=0)
-    labels = ['0-32', '32-64', '64-128', '128-256', '256-512', '512-1024', '1024+']
-    print(datas.shape)
-    create_multi_bars(labels, datas)
-    plt.show()
+    get_gt_num_per_class()
+    # gt_num_from_xml()
+
+    # f_name = 'mytest/gt_bbox_areas_voc_test07_1333_800.pkl'
+    # if os.path.exists(f_name):
+    #     gt_bbox_areas = load_dict(f_name)
+    # else:
+    #     gt_bbox_areas = summary_gt_bbox()
+    #     save_dict(gt_bbox_areas, f_name)
+    # l = []
+    # for c in novel_sets[1]:
+    #     l.append(gt_bbox_areas[c])
+    # datas = np.stack(l, axis=0)
+    # labels = ['0-32', '32-64', '64-128', '128-256', '256-512', '512-1024', '1024+']
+    # print(datas.shape)
+    # create_multi_bars(labels, datas)
+    # plt.show()

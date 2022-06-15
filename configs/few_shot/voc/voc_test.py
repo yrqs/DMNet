@@ -45,8 +45,8 @@ data = dict(
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
             # ann_file=data_root + 'VOC2007/ImageSets/Main/test_split1_base.txt',
 
-            ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-            img_prefix=data_root + 'VOC2007/',
+            # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+            # img_prefix=data_root + 'VOC2007/',
 
             # ann_file=[
             #     data_root + 'VOC2007/ImageSets/Main/trainval_split1_base.txt',
@@ -58,11 +58,11 @@ data = dict(
             #     data_root + 'VOC2007/ImageSets/Main/trainval_' + '10' + 'shot_novel_standard.txt',
             #     data_root + 'VOC2012/ImageSets/Main/trainval_' + '10' + 'shot_novel_standard.txt'
             # ],
-            # ann_file=[
-            #     data_root + 'VOC2007/ImageSets/Main/trainval.txt',
-            #     data_root + 'VOC2012/ImageSets/Main/trainval.txt'
-            # ],
-            # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+            ann_file=[
+                data_root + 'VOC2007/ImageSets/Main/trainval.txt',
+                data_root + 'VOC2012/ImageSets/Main/trainval.txt'
+            ],
+            img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,

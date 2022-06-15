@@ -43,6 +43,7 @@ class XMLDataset(CustomDataset):
         labels = []
         bboxes_ignore = []
         labels_ignore = []
+
         for obj in root.findall('object'):
             name = obj.find('name').text
             if name not in self.CLASSES:
@@ -70,6 +71,10 @@ class XMLDataset(CustomDataset):
             else:
                 bboxes.append(bbox)
                 labels.append(label)
+
+            # bboxes.append(bbox)
+            # labels.append(label)
+
         if not bboxes:
             bboxes = np.zeros((0, 4))
             labels = np.zeros((0, ))
@@ -87,4 +92,5 @@ class XMLDataset(CustomDataset):
             labels=labels.astype(np.int64),
             bboxes_ignore=bboxes_ignore.astype(np.float32),
             labels_ignore=labels_ignore.astype(np.int64))
+
         return ann

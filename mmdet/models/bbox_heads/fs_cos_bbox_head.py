@@ -54,6 +54,8 @@ class FSCosBBoxHead(nn.Module):
                  rep_key_channel=False,
                  num_key_channels=128,
                  use_tanh=False,
+                 dropout=False,
+                 dropout_p=0.8,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -162,6 +164,8 @@ class FSCosBBoxHead(nn.Module):
 
         self.use_tanh = use_tanh
 
+        self.dropout = dropout
+        self.dropout_p = dropout_p
 
     def init_weights(self):
         if self.neg_cls:
@@ -254,8 +258,14 @@ class FSCosBBoxHead(nn.Module):
             cls_feat_norm_ex = F.normalize(cls_feat_ex, p=2, dim=2)
             cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
         else:
-            fg_w_norm = F.normalize(self.fc_cls.weight, p=2, dim=1)
-            cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
+            if self.dropout and self.training:
+                dropout_mask = torch.rand(1, cls_feat.size(1)) > self.dropout_p
+                dropout_mask = dropout_mask.float().to(cls_feat.device)
+                fg_w_norm = F.normalize(self.fc_cls.weight * dropout_mask, p=2, dim=1)
+                cls_feat_norm = F.normalize(cls_feat * dropout_mask, p=2, dim=1)
+            else:
+                fg_w_norm = F.normalize(self.fc_cls.weight, p=2, dim=1)
+                cls_feat_norm = F.normalize(cls_feat, p=2, dim=1)
             fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
             cls_feat_norm_ex = cls_feat_norm[:, None, :].expand_as(fg_w_norm_ex)
             cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
