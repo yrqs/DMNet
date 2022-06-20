@@ -52,11 +52,12 @@ class FSCosBBoxHead(nn.Module):
                  translation_invariance=False,
                  add_fc=False,
                  rep_key_channel=False,
-                 num_key_channels=128,
+                 num_key_channels=256,
                  use_tanh=False,
                  dropout=False,
                  dropout_p=0.8,
                  current_epoch=None,
+                 epoch_thresh=4,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -169,6 +170,7 @@ class FSCosBBoxHead(nn.Module):
         self.dropout_p = dropout_p
 
         self.current_epoch = current_epoch
+        self.epoch_thresh = epoch_thresh
 
     def init_weights(self):
         if self.neg_cls:
@@ -200,7 +202,6 @@ class FSCosBBoxHead(nn.Module):
 
     @auto_fp16()
     def forward(self, x, extra=None):
-        print(self.current_epoch)
         if self.training and (self.grad_scale is not None):
             x = scale_tensor_gard(x, self.grad_scale)
 
@@ -250,7 +251,7 @@ class FSCosBBoxHead(nn.Module):
 
             cls_feat = cls_feat * global_att.expand_as(cls_feat)
 
-        if self.rep_key_channel:
+        if self.rep_key_channel and self.current_epoch >= self.epoch_thresh:
             top_k = self.fc_cls.weight.sort(dim=1, descending=True)[0][:, self.num_key_channels][:, None]
             key_channels_mask = (self.fc_cls.weight > top_k).float()
             key_channels_mask[key_channels_mask==0] = 0.1
@@ -258,7 +259,7 @@ class FSCosBBoxHead(nn.Module):
             fg_w_norm = F.normalize(fg_w_mask, p=2, dim=1)
             fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)
             cls_feat_ex = cls_feat[:, None, :].expand_as(fg_w_norm_ex)
-            cls_feat_ex = cls_feat_ex * key_channels_mask[None, :, :].expand_as(cls_feat_ex)
+            cls_feat_ex = cls_feat_ex * key_channels_mask[None, :, :]
             cls_feat_norm_ex = F.normalize(cls_feat_ex, p=2, dim=2)
             cos_sim = (fg_w_norm_ex * cls_feat_norm_ex).sum(-1)
         else:
