@@ -12,6 +12,12 @@ from mmdet.core import (DistEvalHook, DistOptimizerHook, EvalHook,
 from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.utils import get_root_logger
 
+from mmcv.runner import Hook
+
+class SendEpochHook(Hook):
+    def before_train_epoch(self, runner):
+        if hasattr(runner.model.bbox_head, 'current_epoch'):
+            dist.broadcast(runner.model.bbox_head.current_epoch, runner.epoch())
 
 def set_random_seed(seed, deterministic=False):
     """Set random seed.
@@ -162,6 +168,7 @@ def _dist_train(model,
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config)
     runner.register_hook(DistSamplerSeedHook())
+    runner.register_hook(SendEpochHook())
     # register eval hooks
     if validate:
         val_dataset = build_dataset(cfg.data.val, dict(test_mode=True))

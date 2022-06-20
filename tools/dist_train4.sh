@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-sleep 4h;
+sleep 6h;
 
 ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 
 DATASET='voc'
 MODEL_NAME=frcn_r101_voc
-PARAMETER=torchvision/fs_bbox_head3/1000_600/split2
+PARAMETER=fs_cos_bbox_head/reg_class_agnostic_False/split2
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'

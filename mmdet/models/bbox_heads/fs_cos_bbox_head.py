@@ -56,6 +56,7 @@ class FSCosBBoxHead(nn.Module):
                  use_tanh=False,
                  dropout=False,
                  dropout_p=0.8,
+                 current_epoch=None,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -166,6 +167,8 @@ class FSCosBBoxHead(nn.Module):
 
         self.dropout = dropout
         self.dropout_p = dropout_p
+
+        self.current_epoch = current_epoch
 
     def init_weights(self):
         if self.neg_cls:

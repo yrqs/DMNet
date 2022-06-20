@@ -66,8 +66,7 @@ model = dict(
         out_channels=1024,
         featmap_strides=[16]),
     bbox_head=dict(
-        type='FSCosBBoxHead',
-        cos_scale=3,
+        type='BBoxHead',
         grad_scale=0.75,
         with_avg_pool=True,
         roi_feat_size=7,
@@ -172,7 +171,6 @@ data = dict(
         times=1,
         dataset=dict(
             type=dataset_type,
-            enable_ignore=False,
             ann_file=[
                 # data_root + 'VOC2007/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt',
                 # data_root + 'VOC2012/ImageSets/Main/trainval_split' + str(split_num) + '_base.txt'
@@ -183,7 +181,6 @@ data = dict(
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
-        enable_ignore=True,
         ann_file=data_root + 'VOC2007/ImageSets/Main/test_split' + str(split_num) + '_base.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
@@ -220,6 +217,6 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
 load_from = None
-resume_from = None
+resume_from = 'work_dirs/frcn_r101_voc/torchvision/1000_600/dropout/split2/base/epoch_12.pth'
 resume_optimizer = False
 workflow = [('train', 1)]

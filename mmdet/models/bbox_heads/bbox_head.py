@@ -39,7 +39,7 @@ class BBoxHead(nn.Module):
                  img_classification=False,
                  global_attention=False,
                  global_info=False,
-                 nhead=8,
+                 dropout_p=None,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=False,
@@ -111,6 +111,7 @@ class BBoxHead(nn.Module):
         self.cls_fc_w_mask = nn.Parameter(torch.ones_like(self.fc_cls.weight), requires_grad=False)
         # for p in self.img_cls.parameters():
         #     p.requires_grad = False
+        self.dropout_p = dropout_p
 
     def init_weights(self):
         # conv layers are already initialized by ConvModule
@@ -157,6 +158,9 @@ class BBoxHead(nn.Module):
             x_global_avg = self.global_avg_pool(x_global).flatten(1).expand_as(cls_feat)
             # x_global_max = self.global_max_pool(x_global).flatten(1).expand_as(cls_feat)s
             cls_feat = torch.cat([cls_feat, x_global_avg], dim=1)
+
+        if self.dropout_p is not None:
+            cls_feat = F.dropout(cls_feat, self.dropout_p, self.training)
 
         cls_score = self.fc_cls(cls_feat) if self.with_cls else None
         bbox_pred = self.fc_reg(reg_feat) if self.with_reg else None
