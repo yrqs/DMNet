@@ -16,8 +16,8 @@ from mmcv.runner import Hook
 
 class SendEpochHook(Hook):
     def before_train_epoch(self, runner):
-        if hasattr(runner.model.bbox_head, 'current_epoch'):
-            dist.broadcast(runner.model.bbox_head.current_epoch, runner.epoch())
+        if hasattr(runner.model.module.bbox_head, 'current_epoch'):
+            dist.broadcast(runner.model.module.bbox_head.current_epoch, runner.epoch())
 
 def set_random_seed(seed, deterministic=False):
     """Set random seed.
