@@ -200,6 +200,7 @@ class FSCosBBoxHead(nn.Module):
 
     @auto_fp16()
     def forward(self, x, extra=None):
+        print(self.current_epoch)
         if self.training and (self.grad_scale is not None):
             x = scale_tensor_gard(x, self.grad_scale)
 
