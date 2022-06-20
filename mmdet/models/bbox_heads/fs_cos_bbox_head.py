@@ -56,7 +56,7 @@ class FSCosBBoxHead(nn.Module):
                  use_tanh=False,
                  dropout=False,
                  dropout_p=0.8,
-                 current_epoch=None,
+                 current_epoch=0,
                  epoch_thresh=4,
                  loss_cls=dict(
                      type='CrossEntropyLoss',
@@ -251,7 +251,7 @@ class FSCosBBoxHead(nn.Module):
 
             cls_feat = cls_feat * global_att.expand_as(cls_feat)
 
-        if self.rep_key_channel and self.current_epoch >= self.epoch_thresh:
+        if self.rep_key_channel and (self.current_epoch >= self.epoch_thresh):
             top_k = self.fc_cls.weight.sort(dim=1, descending=True)[0][:, self.num_key_channels][:, None]
             key_channels_mask = (self.fc_cls.weight > top_k).float()
             key_channels_mask[key_channels_mask==0] = 0.1
