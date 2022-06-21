@@ -253,8 +253,9 @@ class FSCosBBoxHead(nn.Module):
 
         if self.rep_key_channel and (self.current_epoch >= self.epoch_thresh):
             top_k = self.fc_cls.weight.sort(dim=1, descending=True)[0][:, self.num_key_channels][:, None]
-            key_channels_mask = (self.fc_cls.weight > top_k).float()
-            key_channels_mask[key_channels_mask==0] = 0.1
+            with torch.no_grad():
+                key_channels_mask = (self.fc_cls.weight > top_k).float()
+                key_channels_mask[key_channels_mask==0] = 0.1
             fg_w_mask = self.fc_cls.weight * key_channels_mask
             fg_w_norm = F.normalize(fg_w_mask, p=2, dim=1)
             fg_w_norm_ex = fg_w_norm[None, :, :].expand(cls_feat.size(0), -1, -1)

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-sleep 4h;
-
 ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 
 DATASET='voc'

@@ -106,7 +106,7 @@ class VOCDataset(XMLDataset):
                 int(float(bnd_box.find('ymax').text))
             ]
             ignore = False
-            if self.enable_ignore:
+            if not self.enable_ignore:
                 if self.min_size:
                     assert not self.test_mode
                     w = bbox[2] - bbox[0]
