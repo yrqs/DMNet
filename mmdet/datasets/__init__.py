@@ -15,11 +15,12 @@ from .voc2coco import VOC2Coco
 
 from .coco_xml import CocoXml10s, CocoXml3s
 from .voc_coco import VOCCOCODataset
+from .meta_voc import MetaVOCDataset
 
 __all__ = [
     'CustomDataset', 'XMLDataset', 'CocoDataset', 'VOCDataset',
     'CityscapesDataset', 'GroupSampler', 'DistributedGroupSampler',
     'build_dataloader', 'ConcatDataset', 'RepeatDataset', 'WIDERFaceDataset',
     'DATASETS', 'build_dataset', 'Underwater', 'VOC2UW20', 'VOC2Coco',
-    'CocoXml10s', 'CocoXml3s', 'VOCCOCODataset'
+    'CocoXml10s', 'CocoXml3s', 'VOCCOCODataset', 'MetaVOCDataset'
 ]

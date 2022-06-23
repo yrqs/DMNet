@@ -112,7 +112,6 @@ def main1():
     cfg = retrieve_data_cfg(args.config, args.skip_type)
     print(cfg)
     dataset = build_dataset(cfg.data.train)
-
     # progress_bar = mmcv.ProgressBar(len(dataset))
     for item in tqdm.tqdm(dataset):
         filename = os.path.join(args.output_dir,
@@ -343,10 +342,10 @@ def gt_num_from_xml():
         print(key, ': ', num_gt_per_class[key])
 
 if __name__ == '__main__':
-    # main1()
+    main1()
     # crop_gt()
     # select_novel(1)
-    get_gt_num_per_class()
+    # get_gt_num_per_class()
     # gt_num_from_xml()
 
     # f_name = 'mytest/gt_bbox_areas_voc_test07_1333_800.pkl'
