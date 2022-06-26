@@ -74,3 +74,49 @@ class DistEvalHook(EvalHook):
         if runner.rank == 0:
             print('\n')
             self.evaluate(runner, results)
+
+
+class DistMetaEvalHook(EvalHook):
+    """Distributed evaluation hook.
+
+    Attributes:
+        dataloader (DataLoader): A PyTorch dataloader.
+        interval (int): Evaluation interval (by epochs). Default: 1.
+        tmpdir (str | None): Temporary directory to save the results of all
+            processes. Default: None.
+        gpu_collect (bool): Whether to use gpu or cpu to collect results.
+            Default: False.
+    """
+
+    def __init__(self,
+                 dataloader,
+                 support_dataloader=None,
+                 interval=1,
+                 gpu_collect=False,
+                 **eval_kwargs):
+        if not isinstance(dataloader, DataLoader):
+            raise TypeError(
+                'dataloader must be a pytorch DataLoader, but got {}'.format(
+                    type(dataloader)))
+        self.dataloader = dataloader
+        self.interval = interval
+        self.gpu_collect = gpu_collect
+        self.eval_kwargs = eval_kwargs
+
+        self.support_dataloader = support_dataloader
+
+    def after_train_epoch(self, runner):
+        if not self.every_n_epochs(runner, self.interval):
+            return
+
+        from mmdet.apis import multi_gpu_test, multi_gpu_pre_test
+        multi_gpu_pre_test(runner.model, self.support_dataloader)
+
+        results = multi_gpu_test(
+            runner.model,
+            self.dataloader,
+            tmpdir=osp.join(runner.work_dir, '.eval_hook'),
+            gpu_collect=self.gpu_collect)
+        if runner.rank == 0:
+            print('\n')
+            self.evaluate(runner, results)

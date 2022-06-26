@@ -187,7 +187,7 @@ def crop_gt():
     cfg = retrieve_data_cfg(args.config, args.skip_type)
     print(cfg)
     dataset = build_dataset(cfg.data.train)
-    save_root = 'mytest/voc_instances/trainval_3shot/'
+    save_root = 'mytest/voc_instances/trainval/'
     # progress_bar = mmcv.ProgressBar(len(dataset))
     num_instances_per_cls = [0 for i in range(len(CLASSES))]
     for i in tqdm.tqdm(range(len(dataset))):
@@ -342,8 +342,8 @@ def gt_num_from_xml():
         print(key, ': ', num_gt_per_class[key])
 
 if __name__ == '__main__':
-    main1()
-    # crop_gt()
+    # main1()
+    crop_gt()
     # select_novel(1)
     # get_gt_num_per_class()
     # gt_num_from_xml()

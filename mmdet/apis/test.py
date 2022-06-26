@@ -8,6 +8,9 @@ import torch
 import torch.distributed as dist
 from mmcv.runner import get_dist_info
 
+import tqdm
+import time
+
 # idx_list = [20, 38, 42, 43]
 idx_list = None
 
@@ -77,6 +80,61 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
     else:
         results = collect_results_cpu(results, len(dataset), tmpdir)
     return results
+
+
+def multi_gpu_pre_test(model, data_loader):
+    """Test model with multiple gpus.
+
+    This method tests model with multiple gpus and collects the results
+    under two different modes: gpu and cpu modes. By setting 'gpu_collect=True'
+    it encodes results to gpu tensors and use gpu communication for results
+    collection. On cpu mode it saves the results on different gpus to 'tmpdir'
+    and collects them by the rank 0 worker.
+
+    Args:
+        model (nn.Module): Model to be tested.
+        data_loader (nn.Dataloader): Pytorch data loader.
+        tmpdir (str): Path of directory to save the temporary results from
+            different gpus under cpu mode.
+        gpu_collect (bool): Option to use either gpu or cpu to collect results.
+
+    Returns:
+        list: The prediction results.
+    """
+    model.eval()
+    dataset = data_loader.dataset
+    dataset.pre_test = True
+    rank, world_size = get_dist_info()
+    time.sleep(2)  # This line can prevent deadlock problem in some cases.
+
+    model.module.bbox_head.meta_representatives *= 0
+    model.module.bbox_head.meta_representatives_counter *= 0
+
+    dist.broadcast(model.module.bbox_head.meta_representatives, src=0)
+    dist.broadcast(model.module.bbox_head.meta_representatives_counter, src=0)
+    for i, data in enumerate(data_loader):
+        with torch.no_grad():
+            model(return_loss=False, rescale=True, pre_test=True, **data)
+
+    meta_representatives_counter_gather = [
+        torch.zeros_like(model.module.bbox_head.meta_representatives_counter).to(model.module.bbox_head.meta_representatives_counter.device) for
+        _ in range(world_size)]
+    meta_representatives_gather = [
+        torch.zeros_like(model.module.bbox_head.meta_representatives).to(model.module.bbox_head.meta_representatives.device) for
+        _ in range(world_size)]
+    dist.all_gather(meta_representatives_counter_gather, model.module.bbox_head.meta_representatives_counter)
+    dist.all_gather(meta_representatives_gather, model.module.bbox_head.meta_representatives)
+    meta_representatives_counter_gather = [m.to(meta_representatives_counter_gather[0].device) for m in meta_representatives_counter_gather]
+    meta_representatives_gather = [m.to(meta_representatives_gather[0].device) for m in meta_representatives_gather]
+    meta_representatives_counter_gather = torch.stack(meta_representatives_counter_gather).sum(0)
+    meta_representatives_gather = torch.stack(meta_representatives_gather).sum(0)
+    # print('meta_representatives_counter_gather: ', meta_representatives_counter_gather)
+    # assert meta_representatives_gather[meta_representatives_counter_gather==0].sum() == 0
+    meta_representatives_counter_gather[meta_representatives_counter_gather==0] = 1
+    meta_representatives = meta_representatives_gather / meta_representatives_counter_gather.unsqueeze(-1)
+    model.module.bbox_head.meta_representatives.data = meta_representatives
+    dist.broadcast(model.module.bbox_head.meta_representatives, src=0)
+    # print(model.module.bbox_head.meta_representatives)
 
 
 def collect_results_cpu(result_part, size, tmpdir=None):

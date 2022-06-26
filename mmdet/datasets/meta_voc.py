@@ -12,9 +12,16 @@ import random
 import mmcv
 from .pipelines import Compose
 
+from mmdet.datasets.pipelines.formating import to_tensor
+import torch
+import mmcv.image as mi
+from mmdet.datasets.pipelines.loading import LoadImageFromFile, LoadAnnotations
+from mmdet.datasets.pipelines.transforms import Resize
+
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 support_pipeline = [
+    # dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     # dict(type='Pad', size_divisor=32),
@@ -51,7 +58,13 @@ class MetaVOCDataset(XMLDataset):
         'novel3': novel_sets[2],
     }
 
-    def __init__(self, enable_ignore=True, process_classes=None, instance_path=None, num_support_instances=5, **kwargs):
+    def __init__(self,
+                 enable_ignore=True,
+                 process_classes=None,
+                 instance_path=None,
+                 num_support_instances=5,
+                 pre_test=False,
+                 **kwargs):
         if process_classes is not None:
             assert isinstance(process_classes, tuple) and len(process_classes)==2
             assert process_classes[0] in self.filter_classes_dict.keys()
@@ -63,6 +76,7 @@ class MetaVOCDataset(XMLDataset):
             self.process_type = None
         self.enable_ignore = enable_ignore
         self.instance_path = instance_path
+        self.pre_test = pre_test
 
         super(MetaVOCDataset, self).__init__(**kwargs)
         if 'VOC2007' in self.img_prefix:
@@ -71,23 +85,26 @@ class MetaVOCDataset(XMLDataset):
             self.year = 2012
         else:
             raise ValueError('Cannot infer dataset year from img_prefix')
+
+        self.instance_files_dict = dict()
         if instance_path is not None:
             image_set = self.ann_file.split('/')[-1].split('.')[0]
             if 'shot' in image_set:
                 image_set = image_set[:-15]
             self.instance_path = osp.join(self.instance_path, image_set)
-
-        self.instance_files_dict = dict()
-        for class_name in self.CLASSES:
-            instance_dir = osp.join(self.instance_path, class_name)
-            l = list()
-            for root, dirs, files in os.walk(instance_dir):
-                for file in files:
-                    if file.endswith('.jpg'):
-                        l.append(osp.join(instance_dir, file))
-            self.instance_files_dict[class_name] = l
-
+            for class_name in self.CLASSES:
+                instance_dir = osp.join(self.instance_path, class_name)
+                l = list()
+                for root, dirs, files in os.walk(instance_dir):
+                    for file in files:
+                        if file.endswith('.jpg'):
+                            l.append(osp.join(instance_dir, file))
+                self.instance_files_dict[class_name] = l
         self.num_support_instances = num_support_instances
+        self.load_img = LoadImageFromFile()
+        self.load_anno = LoadAnnotations(with_bbox=True)
+        # self.resize_multiscale = Resize(img_scale=[(1000, 600), (1000, 60)], multiscale_mode='range', keep_ratio=True)
+        self.resize_multiscale = Resize(img_scale=[(1000, 600), (1000, 60)], multiscale_mode='range', keep_ratio=True)
         self.support_pipeline = Compose(support_pipeline)
 
     def _filter_imgs(self, min_size=32):
@@ -221,7 +238,14 @@ class MetaVOCDataset(XMLDataset):
 
     def __getitem__(self, idx):
         if self.test_mode:
-            return self.prepare_test_img(idx)
+            data = self.prepare_test_img(idx)
+            if self.pre_test:
+                support_data, support_labels  = self.prepare_pre_test_img(idx)
+                data['support_instance_list'] = support_data
+                data['support_instance_labels'] = support_labels
+                # data['support_instance_list'] = 1
+                # data['support_instance_labels'] = 2
+            return data
         while True:
             data = self.prepare_train_img(idx)
             if data is None:
@@ -229,14 +253,50 @@ class MetaVOCDataset(XMLDataset):
                 continue
             if self.instance_path is not None:
                 labels = data['gt_labels'].data
-                support_data = self.prepare_support_instances(labels)
-                data['supports'] = support_data
+                support_data, support_labels = self.prepare_support_instances(labels)
+                data['img_metas'].data['support_instance_list'] = support_data
+                data['img_metas'].data['support_instance_labels'] = support_labels
             return data
+
+    def prepare_pre_test_img(self, idx):
+        """Get testing data  after pipeline.
+
+        Args:
+            idx (int): Index of data.
+
+        Returns:
+            dict: Testing data after pipeline with new keys introduced by \
+                pipeline.
+        """
+        img_info = self.img_infos[idx]
+        ann_info = self.get_ann_info(idx)
+        results = dict(img_info=img_info, ann_info=ann_info)
+        if self.proposals is not None:
+            results['proposals'] = self.proposals[idx]
+        self.pre_pipeline(results)
+        results = self.load_img(results)
+        results = self.load_anno(results)
+        s_img = results['img']
+        s_bboxes = results['gt_bboxes']
+        labels = results['gt_labels']
+        support_patches = mi.imcrop(s_img, s_bboxes)
+        support_instances = []
+        for i in range(len(support_patches)):
+            result = dict(img=mmcv.imread(support_patches[i]))
+            support_instances.append(self.support_pipeline(result)['img'])
+        # support_labels = to_tensor(support_labels)
+        # support_labels = to_tensor(s_labels)
+
+        return support_instances, to_tensor(labels)
 
     def prepare_support_instances(self, labels):
         labels = np.unique(labels)
         if labels.shape[0] > self.num_support_instances:
-            labels = np.random.choice(labels, self.num_support_instances)
+            labels = np.random.choice(labels, self.num_support_instances, replace=False)
+        elif labels.shape[0] < self.num_support_instances:
+            candidates = np.setdiff1d(list(range(1, len(self.CLASSES)+1)), labels)
+            extra_labels = np.random.choice(candidates, self.num_support_instances - labels.shape[0], replace=False)
+            labels = np.concatenate([extra_labels, labels], axis=0)
         support_instances = []
         for l in labels:
             class_name = self.CLASSES[l-1]
@@ -245,8 +305,7 @@ class MetaVOCDataset(XMLDataset):
             result = dict(img=mmcv.imread(instance_file))
             result = self.support_pipeline(result)
             support_instances.append(result)
-        return support_instances
-
+        return support_instances, to_tensor(labels)
 
     def prepare_train_img(self, idx):
         img_info = self.img_infos[idx]
