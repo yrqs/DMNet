@@ -1,13 +1,12 @@
 shot = 1
 shot_idx = [1, 2, 3, 5, 10]
 train_repeat_times = [30, 25, 20, 15, 10]
-# train_repeat_times = [20, 15, 10, 8, 5]
 
 warmup_iters = 10
 lr_step = [10, 14, 16]
-interval = 2
+interval = 14
 lr_base = 0.00075
-imgs_per_gpu = 1
+imgs_per_gpu = 2
 gpu_num = 8
 
 split_num = 2
@@ -27,10 +26,10 @@ VOC_novel_ids = (
 # model settings
 norm_cfg = dict(type='BN', requires_grad=False)
 model = dict(
-    type='MetaFasterRCNN',
-    freeze_backbone=False,
-    freeze_rpn=False,
-    freeze_shared_head=False,
+    type='FasterRCNN',
+    freeze_backbone=True,
+    freeze_rpn=True,
+    freeze_shared_head=True,
     backbone=dict(
         type='ResNet',
         depth=101,
@@ -44,6 +43,7 @@ model = dict(
         style='pytorch'),
     shared_head=dict(
         type='ResLayer',
+        grad_scale=0.001,
         depth=101,
         stage=3,
         stride=2,
@@ -70,9 +70,8 @@ model = dict(
         out_channels=1024,
         featmap_strides=[16]),
     bbox_head=dict(
-        type='MetaFSCosBBoxHead',
+        type='FSCosBBoxHead',
         cos_scale=3,
-        grad_scale=0.001,
         with_avg_pool=True,
         roi_feat_size=7,
         in_channels=2048,
@@ -102,7 +101,7 @@ train_cfg = dict(
         pos_weight=-1,
         debug=False),
     rpn_proposal=dict(
-        nms_across_levels=False,
+        nms_across_levels=True,
         nms_pre=12000,
         nms_post=2000,
         max_num=2000,
@@ -135,7 +134,7 @@ test_cfg = dict(
         score_thr=0.05, nms=dict(type='nms', iou_thr=0.5), max_per_img=100))
 # dataset settings
 # dataset_type = 'VOCDatasetNovel2'
-dataset_type = 'FSMetaVOCDataset'
+dataset_type = 'VOCDataset'
 data_root = 'data/VOCdevkit/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
@@ -168,64 +167,35 @@ test_pipeline = [
             dict(type='Collect', keys=['img']),
         ])
 ]
-
-support_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(
-        type='MultiScaleFlipAug',
-        img_scale=(1000, 600),
-        flip=False,
-        transforms=[
-            dict(type='Normalize', **img_norm_cfg),
-            dict(type='Pad', size_divisor=32),
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img']),
-        ])
-]
-
 data = dict(
     imgs_per_gpu=imgs_per_gpu,
-    workers_per_gpu=2,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=train_repeat_times,
         dataset=dict(
             type=dataset_type,
-            enable_ignore=True,
-            instance_path='mytest/voc_instances',
             ann_file=[
                 data_root + 'VOC2007/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt',
                 data_root + 'VOC2012/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt'
             ],
             img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
             pipeline=train_pipeline)),
-    support=dict(
-        type=dataset_type,
-        enable_ignore=True,
-        instance_path='mytest/voc_instances',
-        ann_file=[
-            data_root + 'VOC2007/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt',
-            data_root + 'VOC2012/ImageSets/Main/trainval_' + 'n' + 'shot_novel_standard.txt'
-        ],
-        img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        pipeline=support_pipeline),
     val=dict(
         type=dataset_type,
-        enable_ignore=True,
-        instance_path='mytest/voc_instances',
         ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
         # ann_file=data_root + 'VOC2007/ImageSets/Main/novel_split2_test.txt',
         img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline),
     test=dict(
         type=dataset_type,
-        # ann_file=[
-        #     data_root + 'VOC2007/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt',
-        #     data_root + 'VOC2012/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt'
-        # ],
-        # img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
-        ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
-        img_prefix=data_root + 'VOC2007/',
+        ann_file=[
+            data_root + 'VOC2007/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt',
+            data_root + 'VOC2012/ImageSets/Main/trainval_' + '5' + 'shot_novel_standard.txt'
+        ],
+        img_prefix=[data_root + 'VOC2007/', data_root + 'VOC2012/'],
+        # ann_file=data_root + 'VOC2007/ImageSets/Main/test.txt',
+        # img_prefix=data_root + 'VOC2007/',
         pipeline=test_pipeline))
 
 evaluation = dict(interval=interval, metric='mAP')
@@ -254,6 +224,6 @@ total_epochs = lr_step[1]
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_caffe_c4_1x'
-load_from = 'work_dirs/meta_frcn_voc/meta_fs_cos_bbox_head/default/split2/base/epoch_14.pth'
+load_from = 'work_dirs/frcn_r101_voc/fs_cos_bbox_head/shared_head_gradsacle/split2/base/epoch_14.pth'
 resume_from = None
 workflow = [('train', 1)]

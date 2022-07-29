@@ -70,7 +70,7 @@ class CustomDataset(Dataset):
         else:
             self.proposals = None
         # filter images too small
-        if (self.pre_test) or not test_mode:
+        if (hasattr(self, 'pre_test') and self.pre_test) or not test_mode:
             valid_inds = self._filter_imgs()
             self.img_infos = [self.img_infos[i] for i in valid_inds]
             if self.proposals is not None:

@@ -7,6 +7,7 @@ from mmdet.utils import get_root_logger
 from ..backbones import ResNet, make_res_layer
 from ..registry import SHARED_HEADS
 
+from mmdet.ops.scale_grad import scale_tensor_gard
 
 @SHARED_HEADS.register_module
 class ResLayer(nn.Module):
@@ -20,7 +21,8 @@ class ResLayer(nn.Module):
                  norm_cfg=dict(type='BN', requires_grad=True),
                  norm_eval=True,
                  with_cp=False,
-                 dcn=None):
+                 dcn=None,
+                 grad_scale=None):
         super(ResLayer, self).__init__()
         self.norm_eval = norm_eval
         self.norm_cfg = norm_cfg
@@ -44,6 +46,8 @@ class ResLayer(nn.Module):
             dcn=dcn)
         self.add_module('layer{}'.format(stage + 1), res_layer)
 
+        self.grad_scale = grad_scale
+
     def init_weights(self, pretrained=None):
         if isinstance(pretrained, str):
             logger = get_root_logger()
@@ -59,6 +63,8 @@ class ResLayer(nn.Module):
 
     @auto_fp16()
     def forward(self, x):
+        if self.training and (self.grad_scale is not None):
+            x = scale_tensor_gard(x, self.grad_scale)
         res_layer = getattr(self, 'layer{}'.format(self.stage + 1))
         out = res_layer(x)
         return out

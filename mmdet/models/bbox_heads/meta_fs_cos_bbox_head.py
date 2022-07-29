@@ -163,6 +163,8 @@ class MetaFSCosBBoxHead(nn.Module):
             extra_return = support_instance_labels
         else:
             instance_propotypes = self.meta_representatives
+            if self.base_ids is not None:
+                instance_propotypes = instance_propotypes[self.base_ids, :]
 
         bs, c, w, h = x.shape
         if self.spicial_att:

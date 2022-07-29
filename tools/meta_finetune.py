@@ -96,7 +96,7 @@ def main():
         shot_idx = cfg.shot_idx.index(args.shot)
         train_repeat_times = cfg.train_repeat_times[shot_idx]
         cfg.data['train']['times'] = train_repeat_times
-        cfg.data['support']['dataset']['ann_file'] = cfg.data['train']['dataset']['ann_file']
+        cfg.data['support']['ann_file'] = cfg.data['train']['dataset']['ann_file']
 
     if args.autoscale_lr:
         # apply the linear scaling rule (https://arxiv.org/abs/1706.02677)

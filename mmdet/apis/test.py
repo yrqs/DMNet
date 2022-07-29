@@ -26,7 +26,7 @@ def single_gpu_test(model, data_loader, show=False):
 
         if show:
             if idx_list is None or i in idx_list:
-                model.module.show_result(data, result, score_thr=0.06, idx=i)
+                model.module.show_result(data, result, score_thr=0.2, idx=i)
 
         batch_size = data['img'][0].size(0)
         for _ in range(batch_size):

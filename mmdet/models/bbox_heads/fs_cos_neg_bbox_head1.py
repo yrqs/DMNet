@@ -253,9 +253,8 @@ class FSCosNegBBoxHead1(nn.Module):
                 cos_sim_pos_other_max - cos_sim_pos_gt + self.triplet_margin).mean() * self.triplet_loss_weight
 
         cls_score_ori, cos_sim, cos_sim_neg = extra
+        cos_sim_cat = torch.cat([cos_sim[:, :, None], cos_sim_neg[:, :, None]], dim=-1)
         with torch.no_grad():
-            cos_sim_cat = torch.cat([cos_sim[:, :, None], cos_sim_neg[:, :, None]], dim=-1)
-
             pred_score, pred_cls = cls_score_ori.clone().detach().max(1)
             correct_inds = pred_cls == (labels - 1)
             neg_labels = pred_cls.clone() + 1
@@ -263,19 +262,20 @@ class FSCosNegBBoxHead1(nn.Module):
             neg_labels[correct_inds] = 0
             hn_inds = neg_labels > 0
             losses['num_hn'] = hn_inds.sum().float()
-            if hn_inds.sum() > 0:
-                hn_labels = neg_labels[hn_inds]
-                hn_labels_oh = F.one_hot(hn_labels, num_classes=self.num_classes).byte()[:, 1:]
-                cos_sim_cat_hn = cos_sim_cat[hn_inds][hn_labels_oh]
-                losses['loss_hn_neg'] = F.relu(cos_sim_cat_hn[:, 0] - cos_sim_cat_hn[:, 1] + self.neg_margin).mean()
-            else:
-                losses['loss_hn_neg'] = torch.zeros(1).to(cls_score.device)
 
-            pos_inds = labels > 0
-            labels_pos = labels[pos_inds]
-            labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()[:, 1:]
-            cos_sim_cat_pos = cos_sim_cat[pos_inds][labels_pos_one_hot]
-            losses['loss_hn_pos'] = F.relu(cos_sim_cat_pos[:, 1] - cos_sim_cat_pos[:, 0] + self.neg_margin).mean()
+        if hn_inds.sum() > 0:
+            hn_labels = neg_labels[hn_inds]
+            hn_labels_oh = F.one_hot(hn_labels, num_classes=self.num_classes).byte()[:, 1:]
+            cos_sim_cat_hn = cos_sim_cat[hn_inds][hn_labels_oh]
+            losses['loss_hn_neg'] = F.relu(cos_sim_cat_hn[:, 0] - cos_sim_cat_hn[:, 1] + self.neg_margin).mean()
+        else:
+            losses['loss_hn_neg'] = torch.zeros(1).to(cls_score.device)
+
+        pos_inds = labels > 0
+        labels_pos = labels[pos_inds]
+        labels_pos_one_hot = F.one_hot(labels_pos.flatten(0), num_classes=self.num_classes).byte()[:, 1:]
+        cos_sim_cat_pos = cos_sim_cat[pos_inds][labels_pos_one_hot]
+        losses['loss_hn_pos'] = F.relu(cos_sim_cat_pos[:, 1] - cos_sim_cat_pos[:, 0] + self.neg_margin).mean()
 
         if bbox_pred is not None:
             pos_inds = labels > 0

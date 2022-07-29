@@ -21,7 +21,7 @@ from mmdet.datasets.pipelines.transforms import Resize
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 support_pipeline = [
-    # dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    # dict(type='Resize', img_scale=(256, 256), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     # dict(type='Pad', size_divisor=32),
@@ -105,6 +105,7 @@ class MetaVOCDataset(XMLDataset):
         self.load_anno = LoadAnnotations(with_bbox=True)
         # self.resize_multiscale = Resize(img_scale=[(1000, 600), (1000, 60)], multiscale_mode='range', keep_ratio=True)
         self.resize_multiscale = Resize(img_scale=[(1000, 600), (1000, 60)], multiscale_mode='range', keep_ratio=True)
+        self.resize_pre_test = Resize(img_scale=(256, 256), keep_ratio=True)
         self.support_pipeline = Compose(support_pipeline)
 
     def _filter_imgs(self, min_size=32):
@@ -283,6 +284,7 @@ class MetaVOCDataset(XMLDataset):
         support_instances = []
         for i in range(len(support_patches)):
             result = dict(img=mmcv.imread(support_patches[i]))
+            result = self.resize_pre_test(result)
             support_instances.append(self.support_pipeline(result)['img'])
         # support_labels = to_tensor(support_labels)
         # support_labels = to_tensor(s_labels)
@@ -303,6 +305,7 @@ class MetaVOCDataset(XMLDataset):
             instance_file_list = self.instance_files_dict[class_name]
             instance_file = random.choice(instance_file_list)
             result = dict(img=mmcv.imread(instance_file))
+            result = self.resize_multiscale(result)
             result = self.support_pipeline(result)
             support_instances.append(result)
         return support_instances, to_tensor(labels)

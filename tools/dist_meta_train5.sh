@@ -4,15 +4,15 @@ ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 
 DATASET='voc'
 MODEL_NAME=meta_frcn_voc
-PARAMETER=meta_fs_cos_bbox_head/default/split2
+PARAMETER=meta_fs_cos_bbox_head/shared_head_gradsacle/split2
 
 CONFIG_PATH='configs/few_shot/'$DATASET'/'$MODEL_NAME'/'$PARAMETER'/'
 WORK_DIR_BASE='work_dirs/'$MODEL_NAME'/'$PARAMETER'/'
 PORT=${PORT:-27500}
 PYTHON=${PYTHON:-"python"}
 
-GPU_ID=0,1,2,3
-GPUS=4
+GPU_ID=0,1,2,3,4,5,6,7
+GPUS=8
 
 CONFIG=$CONFIG_PATH'base.py'
 OMP_NUM_THREADS=2 \
@@ -30,6 +30,18 @@ CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_nod
     --validate \
     --shot $i \
     --work_dir $WORK_DIR_BASE'D/'$i'shot' \
+    && sleep 20s
+done;
+
+CONFIG=$CONFIG_PATH'finetuneDF.py'
+for i in {1,2,3,5,10}
+do
+OMP_NUM_THREADS=2 \
+CUDA_VISIBLE_DEVICES=$GPU_ID $PYTHON -m torch.distributed.launch --nproc_per_node=$GPUS --master_port=$PORT \
+    $(dirname "$0")/meta_finetune.py $CONFIG --launcher pytorch ${@:3} \
+    --validate \
+    --shot $i \
+    --work_dir $WORK_DIR_BASE'DFFF/'$i'shot' \
     && sleep 20s
 done;
 
@@ -69,7 +81,7 @@ done;
 
 #ps -ef | grep mmdetection | awk '{print $2}' | xargs kill -9;
 #
-#DATASET='voc'
+#DATASET='voc'7
 #MODEL_NAME=frcn_r101_voc
 #PARAMETER=fs_cos_bbox_head/cos_scale5/split2
 #
