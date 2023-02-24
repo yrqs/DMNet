@@ -117,3 +117,5 @@ work_dirs/
 # Pytorch
 *.pth
 mytest/
+browse_bboxes_results
+offline_results
