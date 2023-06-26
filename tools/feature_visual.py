@@ -309,12 +309,21 @@ def plot_feature_pyramids_similarity(feature_pyramids1, feature_pyramids2):
     similarity = np.vstack(similarity)
     plot_similarity(similarity)
 
+def show_feat(feat):
+    feat = feat.abs().sum(0)[:-1, :-1]
+    plt.imshow(feat.clone().cpu(), cmap='rainbow')
+    plt.xticks([])
+    plt.yticks([])
+    plt.subplots_adjust(left=0.0, right=1., bottom=0.0, top=1.0)
+    plt.show()
+
 CLASSES_VOC = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
                'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
                'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
 
 
-show_list = [13, 43, 44, 46, 47, ]
+# show_list = [13, 43, 44, 46, 47, ]
+show_list = [1, ]
 # show_list = [13, 16, 18, 32, 34, 38, 43, 44, 46, 47, ]
 not_show_list = []
 
@@ -367,27 +376,30 @@ if __name__ == '__main__':
 
     # feature_type = 'ga_retina_dml3'
     # feature_type = 'ga_retina_dmlneg7'
-    feature_type = 'ga_retina_dmlneg3'
-    # feature_type = 'DFPN4'
+    # feature_type = 'ga_retina_dmlneg3'
+    feature_type = 'FPN'
     # root_path = 'mytest/ga_dmlneg7_base2_t3s/'
-    root_path = 'mytest/ga_dmlneg3_base2_t3s/'
+    root_path = 'mytest/ga_retina_dml3_finetune_epoch_18_1shot/'
     # root_path = 'mytest/ga_retina_dml3_dfpn2_1shot/'
     # root_path = 'mytest/ga_retina_dml2D_fpn_1shot/'
     # root_path = 'mytest/ga_retina_dml3_fpn_1shot/'
 
     file_name_base, outs_names = file_outs_dict[feature_type]
     file_name_base = root_path + file_name_base
-    file_num = 50
+    file_num = 17
     feature_pyramids_similarity_list = []
     for i in range(file_num):
-        if filter_show and i not in show_list:
-            continue
+        # if filter_show and i not in show_list:
+        #     continue
         file_name = file_name_base[:-4] + str(i+1) + file_name_base[-4:]
         outs = torch.load(file_name, map_location=torch.device("cpu"))
+        show_feat(outs['fpn_outs'][2][0])
+        # show_feat(outs['reg_feat'][2][0])
+        # show_feat(outs['cls_feat_adp'][2][0])
         # show_feature_pyramids_L2(outs, outs_names)
         # plot_feature_pyramids_similarity(outs['outs_cls'], outs['outs_reg'])
         # show_cls_feat_enhances(outs)
-        show_cls_feat_enhances_sum(outs)
+        # show_cls_feat_enhances_sum(outs)
         # show_emb_vectors_TSNE(outs)
         # show_offsets(outs)
         # show_reg_feat_enhances(outs)
