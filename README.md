@@ -15,6 +15,7 @@ cd DMNet
 2. Prepare Data
 - Refer to [MPSR](https://github.com/jiaxi-wu/MPSR.git). 
 - The final dataset file structure is as follows:
+```
   ...
   configs
   data
@@ -40,8 +41,10 @@ cd DMNet
                                     | -- trainval_split*_base.txt
                                     | -- trainval_*shot_novel_standard.txt
   ...
+```
 3. Config files
 - Config files are shown below:
+```
   configs
     | -- few_shot
             | -- coco
@@ -52,6 +55,7 @@ cd DMNet
                     | -- dmnet_split*
                             | -- base.py
                             | -- finetune.py
+```
 4. Training and Finetuning
 - Training on base classes:
 ```
