@@ -76,3 +76,18 @@ tools/dist_test.sh config_file checkpoint_file num_gpus
 
 ### Acknowledgement
 This repo is developed based on [MMDetection v1.1.0](https://github.com/open-mmlab/mmdetection/tree/v1.1.0). Please check them for more details and features.
+
+### Citing
+If you use this work in your research or wish to refer to the baseline results published here, please use the following BibTeX entries:
+```
+@ARTICLE{9721820,
+  author={Lu, Yue and Chen, Xingyu and Wu, Zhengxing and Yu, Junzhi},
+  journal={IEEE Transactions on Cybernetics}, 
+  title={Decoupled Metric Network for Single-Stage Few-Shot Object Detection}, 
+  year={2023},
+  volume={53},
+  number={1},
+  pages={514-525},
+  doi={10.1109/TCYB.2022.3149825}}
+
+```
