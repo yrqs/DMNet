@@ -66,7 +66,6 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0),
-        # loss_cls=dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=0.7),
         loss_bbox=dict(type='SmoothL1Loss', beta=0.04, loss_weight=1.0),
         loss_emb=dict(type='TripletLoss', alpha=alpha, loss_weight=1.0)))
 # training and testing settings

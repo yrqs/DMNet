@@ -185,6 +185,5 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/ga_dml_x101_32x4d_fpn_1x'
 load_from = None
-# resume_from = 'work_dirs/ga_retina_dml3_s2_fpn_256_emb256_128_alpha015_le10_CE_nratio3_voc_base1_r1_lr00025x2x2_10_14_16_ind1_1/epoch_8.pth'
 resume_from = None
 workflow = [('train', 1)]
