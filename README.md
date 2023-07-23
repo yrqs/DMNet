@@ -13,7 +13,7 @@ cd DMNet
 ```
 - Install MMDetection (see [MMDet_README](https://gitee.com/yrqs/DMNetFinal/blob/main/MMDet_README.md))
 2. Prepare Data
-- Refer to [MPSR](https://github.com/jiaxi-wu/MPSR.git). 
+- Refer to [MPSR](https://github.com/jiaxi-wu/MPSR.git). The generated related files can also be downloaded directly from [here](https://drive.google.com/drive/folders/1lKok8MzTJtlXxCGcCcwSUhelypxw-ES4?usp=sharing).
 - The final dataset file structure is as follows:
 ```
   ...
@@ -24,6 +24,9 @@ cd DMNet
                     | -- instances_train2014_base.json
                     | -- instances_valminusminival2014_base.json
                     | -- instances_minival2014.json
+                    | -- instances_valminusminival2014.json
+                    | -- instances_train2014_*shot_novel_standard.json
+                    | -- instances_val2014_*shot_novel_standard.json
             | -- images
                     | -- trainval2014
     | -- VOCdevkit
